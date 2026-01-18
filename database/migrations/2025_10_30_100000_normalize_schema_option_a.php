@@ -38,7 +38,12 @@ return new class extends Migration {
                     $table->timestamp('updated_at')->nullable();
                 }
                 if (!Schema::hasColumn('rounds', 'game_id')) {
-                    $table->unsignedBigInteger('game_id')->nullable()->after('id');
+                    $afterColumn = Schema::hasColumn('rounds', 'round_id') ? 'round_id' : (Schema::hasColumn('rounds', 'id') ? 'id' : null);
+                    if ($afterColumn) {
+                        $table->unsignedBigInteger('game_id')->nullable()->after($afterColumn);
+                    } else {
+                        $table->unsignedBigInteger('game_id')->nullable();
+                    }
                     try {
                         $table->foreign('game_id')->references('game_id')->on('games')->onDelete('cascade');
                     } catch (\Throwable $e) {
