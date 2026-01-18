@@ -26,7 +26,13 @@ fi
 
 # Run database migrations automatically
 echo "Running database migrations..."
-php /var/www/html/artisan migrate --force || echo "Migration failed, continuing..."
+if php /var/www/html/artisan migrate --force; then
+  echo "Migrations completed successfully."
+else
+  echo "CRITICAL: Database migrations failed!"
+  # In production, you might want to exit here if migrations are mandatory
+  # exit 1
+fi
 
 # (Optional) Warm caches if env is present; ignore failures during first boot.
 if [ -f /var/www/html/.env ] || [ -n "${APP_KEY:-}" ]; then
