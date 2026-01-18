@@ -96,17 +96,13 @@ class AuthController extends Controller
                 'vibration_enabled' => true,
             ]);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Email de vérification envoyé',
-                'data' => [
-                    'user' => [
-                        'user_id' => $user->user_id,
-                        'pseudo' => $user->pseudo,
-                        'email' => $user->email,
-                    ],
-                ]
-            ], 201);
+            return $this->apiResponse(true, 'Email de vérification envoyé', [
+                'user' => [
+                    'user_id' => $user->user_id,
+                    'pseudo' => $user->pseudo,
+                    'email' => $user->email,
+                ],
+            ], 201, false);
 
         } catch (\Exception $e) {
             return response()->json([
@@ -187,22 +183,18 @@ class AuthController extends Controller
                 (($user->pseudo === 'manageradmin' || $user->email === 'manageradmin@cauris.com') ? 'manager' : 'user')
             );
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Connexion réussie',
+            return $this->apiResponse(true, 'Connexion réussie', [
                 'token' => $token,
-                'data' => [
-                    'user' => [
-                        'user_id' => $user->user_id,
-                        'pseudo' => $user->pseudo,
-                        'email' => $user->email,
-                        'avatar' => $user->avatar,
-                        'theme_preference' => $user->theme_preference,
-                        'role' => $role,
-                        'cauris_balance' => $user->cauris_balance ?? 0,
-                    ]
+                'user' => [
+                    'user_id' => $user->user_id,
+                    'pseudo' => $user->pseudo,
+                    'email' => $user->email,
+                    'avatar' => $user->avatar,
+                    'theme_preference' => $user->theme_preference,
+                    'role' => $role,
+                    'cauris_balance' => $user->cauris_balance ?? 0,
                 ]
-            ], 200);
+            ], 200, false);
 
         } catch (\Exception $e) {
             return response()->json([

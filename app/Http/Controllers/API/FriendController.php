@@ -38,10 +38,7 @@ class FriendController extends Controller
                     ];
                 });
 
-            return response()->json([
-                'success' => true,
-                'data' => $friends
-            ], 200);
+            return $this->apiResponse(true, 'Amis récupérés', $friends);
 
         } catch (\Exception $e) {
             return response()->json([
@@ -76,10 +73,7 @@ class FriendController extends Controller
                 ->limit(20)
                 ->get();
 
-            return response()->json([
-                'success' => true,
-                'data' => $users
-            ], 200);
+            return $this->apiResponse(true, 'Utilisateurs trouvés', $users);
 
         } catch (\Exception $e) {
             return response()->json([
@@ -170,10 +164,9 @@ class FriendController extends Controller
                     ];
                 });
 
-            return response()->json([
-                'success' => true,
+            return $this->apiResponse(true, 'Demandes d\'amitié récupérées', [
                 'requests' => $receivedRequests
-            ], 200);
+            ], 200, false);
 
         } catch (\Exception $e) {
             return response()->json([

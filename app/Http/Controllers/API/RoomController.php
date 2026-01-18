@@ -32,21 +32,18 @@ class RoomController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->get();
 
-            return response()->json([
-                'success' => true,
-                'data' => $rooms->map(function($room) {
-                    return [
-                        'room_id' => $room->room_id,
-                        'room_name' => $room->room_name,
-                        'room_code' => $room->room_code,
-                        'minimum_bet' => $room->minimum_bet,
-                        'player_count' => $room->players->count(),
-                        'max_players' => $room->max_players,
-                        'status' => $room->status,
-                        'created_at' => $room->created_at,
-                    ];
-                })
-            ], 200);
+            return $this->apiResponse(true, 'Salles récupérées', $rooms->map(function($room) {
+                return [
+                    'room_id' => $room->room_id,
+                    'room_name' => $room->room_name,
+                    'room_code' => $room->room_code,
+                    'minimum_bet' => $room->minimum_bet,
+                    'player_count' => $room->players->count(),
+                    'max_players' => $room->max_players,
+                    'status' => $room->status,
+                    'created_at' => $room->created_at,
+                ];
+            }));
 
         } catch (\Exception $e) {
             return response()->json([
@@ -123,17 +120,13 @@ class RoomController extends Controller
             
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Salle créée avec succès',
-                'data' => [
-                    'room_id' => $room->room_id,
-                    'room_name' => $room->room_name,
-                    'room_code' => $room->room_code,
-                    'minimum_bet' => $room->minimum_bet,
-                    'status' => $room->status
-                ]
-            ], 201);
+            return $this->apiResponse(true, 'Salle créée avec succès', [
+                'room_id' => $room->room_id,
+                'room_name' => $room->room_name,
+                'room_code' => $room->room_code,
+                'minimum_bet' => $room->minimum_bet,
+                'status' => $room->status
+            ], 201, false);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -234,16 +227,12 @@ class RoomController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Vous avez rejoint la salle',
-                'data' => [
-                    'room_id' => $room->room_id,
-                    'room_name' => $room->room_name,
-                    'room_code' => $room->room_code,
-                    'minimum_bet' => $room->minimum_bet,
-                ]
-            ], 200);
+            return $this->apiResponse(true, 'Vous avez rejoint la salle', [
+                'room_id' => $room->room_id,
+                'room_name' => $room->room_name,
+                'room_code' => $room->room_code,
+                'minimum_bet' => $room->minimum_bet,
+            ], 200, false);
 
         } catch (\Exception $e) {
             DB::rollBack();

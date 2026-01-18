@@ -35,11 +35,10 @@ class PaymentController extends Controller
         try {
             $user = $request->user();
             
-            return response()->json([
-                'success' => true,
+            return $this->apiResponse(true, 'Solde récupéré', [
                 'balance' => $user->cauris_balance ?? 0,
                 'company_balance' => $this->getCompanyBalance(),
-            ], 200);
+            ], 200, false);
 
         } catch (\Exception $e) {
             return response()->json([
@@ -71,13 +70,12 @@ class PaymentController extends Controller
             $balance = $user->cauris_balance ?? 0;
             $hasEnough = $balance >= $requiredAmount;
 
-            return response()->json([
-                'success' => true,
+            return $this->apiResponse(true, 'Vérification du solde effectuée', [
                 'balance' => $balance,
                 'required_amount' => $requiredAmount,
                 'has_enough' => $hasEnough,
                 'shortage' => max(0, $requiredAmount - $balance),
-            ], 200);
+            ], 200, false);
 
         } catch (\Exception $e) {
             return response()->json([
@@ -139,12 +137,10 @@ class PaymentController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Mise débitée avec succès',
+            return $this->apiResponse(true, 'Mise débitée avec succès', [
                 'new_balance' => $user->cauris_balance,
                 'amount_debited' => $amount,
-            ], 200);
+            ], 200, false);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -187,11 +183,9 @@ class PaymentController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Montant crédité avec succès',
+            return $this->apiResponse(true, 'Montant crédité avec succès', [
                 'new_balance' => $user->cauris_balance,
-            ], 200);
+            ], 200, false);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -263,10 +257,7 @@ class PaymentController extends Controller
                 ->limit($limit)
                 ->get();
             
-            return response()->json([
-                'success' => true,
-                'data' => $items,
-            ], 200);
+            return $this->apiResponse(true, 'Transactions récupérées', $items);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -376,18 +367,14 @@ class PaymentController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Paiement FedaPay initié avec succès',
-                'data' => [
-                    'transaction_id' => $transactionId,
-                    'fedapay_transaction_id' => $fedapayTransaction->id,
-                    'payment_url' => $paymentUrl,
-                    'payment_token' => $paymentToken->token ?? null,
-                    'cauris' => $cauris,
-                    'fcfa' => $amountFcfa,
-                ],
-            ], 201);
+            return $this->apiResponse(true, 'Paiement FedaPay initié avec succès', [
+                'transaction_id' => $transactionId,
+                'fedapay_transaction_id' => $fedapayTransaction->id,
+                'payment_url' => $paymentUrl,
+                'payment_token' => $paymentToken->token ?? null,
+                'cauris' => $cauris,
+                'fcfa' => $amountFcfa,
+            ], 201, false);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -606,12 +593,10 @@ class PaymentController extends Controller
                 'updated_at' => now(),
             ]);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Demande de retrait enregistrée et en attente de validation',
+            return $this->apiResponse(true, 'Demande de retrait enregistrée et en attente de validation', [
                 'cauris' => $cauris,
                 'fcfa' => $fcfa,
-            ], 201);
+            ], 201, false);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
