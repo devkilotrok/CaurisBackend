@@ -67,7 +67,12 @@ class AuthController extends Controller
             // Les admins doivent être créés uniquement via le panel d'administration
             
             // Créer l'utilisateur inactif avec role = 'user' (toujours)
+            // On remplit 'name' avec first_name + last_name ou le pseudo par défaut
+            $fullName = trim(($request->first_name ?? '') . ' ' . ($request->last_name ?? ''));
+            if (empty($fullName)) $fullName = $request->pseudo;
+
             $user = User::create([
+                'name' => $fullName,
                 'pseudo' => $request->pseudo,
                 'email' => $request->email,
                 'password_hash' => Hash::make($request->password),
