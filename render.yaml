@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: backendcauris
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_NAME
+        value: BackendCauris
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: false
+      - key: APP_URL
+        sync: false
+      - key: APP_KEY
+        generateValue: true
+      - key: LOG_CHANNEL
+        value: stack
+      - key: LOG_LEVEL
+        value: error
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_HOST
+        fromDatabase:
+          name: backendcauris-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: backendcauris-db
+          property: port
+      - key: DB_DATABASE
+        fromDatabase:
+          name: backendcauris-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: backendcauris-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: backendcauris-db
+          property: password
+      - key: CACHE_DRIVER
+        value: file
+      - key: QUEUE_CONNECTION
+        value: sync
+      - key: SESSION_DRIVER
+        value: file
+      - key: SESSION_LIFETIME
+        value: 120
+      - key: BROADCAST_DRIVER
+        value: log
+      - key: FILESYSTEM_DISK
+        value: local
+
+databases:
+  - name: backendcauris-db
+    databaseName: backendcauris
+    plan: free

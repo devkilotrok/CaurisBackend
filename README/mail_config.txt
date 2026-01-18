@@ -1,0 +1,39 @@
+Solution pour configurer l'envoi d'emails :
+
+SOLUTION 1 : GMAIL (Recommandé pour développement)
+
+1. Ouvrez le fichier .env :
+   nano .env
+
+2. Remplacez les lignes MAIL_* par :
+   MAIL_MAILER=smtp
+   MAIL_HOST=smtp.gmail.com
+   MAIL_PORT=587
+   MAIL_USERNAME=votre-email@gmail.com
+   MAIL_PASSWORD=mot-de-passe-application
+   MAIL_ENCRYPTION=tls
+   MAIL_FROM_ADDRESS="votre-email@gmail.com"
+   MAIL_FROM_NAME="${APP_NAME}"
+
+3. Pour obtenir un mot de passe d'application Gmail :
+   - Allez sur https://myaccount.google.com/apppasswords
+   - Générez un nouveau mot de passe
+   - Utilisez ce mot de passe (pas votre mot de passe Gmail)
+
+SOLUTION 2 : MAILTRAP (Alternative gratuite)
+
+1. Ouvrez le fichier .env :
+   nano .env
+
+2. Remplacez les lignes MAIL_* par :
+   MAIL_MAILER=smtp
+   MAIL_HOST=smtp.mailtrap.io
+   MAIL_PORT=2525
+   MAIL_USERNAME=votre-username
+   MAIL_PASSWORD=votre-password
+   MAIL_ENCRYPTION=tls
+   MAIL_FROM_ADDRESS="noreply@cauris.com"
+   MAIL_FROM_NAME="${APP_NAME}"
+
+3. Inscrivez-vous sur https://mailtrap.io/ (gratuit)
+
