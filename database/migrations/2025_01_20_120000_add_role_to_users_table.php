@@ -38,16 +38,21 @@ return new class extends Migration
             $casePseudoManager = $hasPseudo ? "pseudo = 'manageradmin' OR " : "";
             $caseIsAdmin = $hasIsAdmin ? "WHEN is_admin = true OR is_admin::text = '1' THEN 'admin'" : "";
 
-            DB::statement("
-                UPDATE users 
-                SET role = CASE 
-                    WHEN {$casePseudoSuper}email = 'superadmin@cauris.com' THEN 'superadmin'
-                    WHEN {$casePseudoManager}email = 'manageradmin@cauris.com' THEN 'manager'
-                    {$caseIsAdmin}
-                    ELSE 'user'
-                END
-                WHERE role IS NULL OR role = ''
-            ");
+            try {
+                DB::statement("
+                    UPDATE users 
+                    SET role = CASE 
+                        WHEN {$casePseudoSuper}email = 'superadmin@cauris.com' THEN 'superadmin'
+                        WHEN {$casePseudoManager}email = 'manageradmin@cauris.com' THEN 'manager'
+                        {$caseIsAdmin}
+                        ELSE 'user'
+                    END
+                    WHERE role IS NULL OR role = ''
+                ");
+            } catch (\Exception $e) {
+                // Silently skip if data-only update fails
+                \Log::warning("Migration 2025_01_20_120000: Data update skipped: " . $e->getMessage());
+            }
         }
     }
 
