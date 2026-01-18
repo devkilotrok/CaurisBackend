@@ -132,10 +132,11 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            // Rechercher l'utilisateur par email ou pseudo
-            $user = User::where('email', $request->login)
-                ->orWhere('pseudo', $request->login)
-                ->first();
+            // Rechercher l'utilisateur par email ou pseudo (Insensible à la casse pour PostgreSQL)
+            $user = User::where(function($query) use ($request) {
+                $query->where('email', 'ILIKE', $request->login)
+                      ->orWhere('pseudo', 'ILIKE', $request->login);
+            })->first();
 
             if (!$user || !Hash::check($request->password, $user->password_hash)) {
                 return response()->json([
@@ -240,7 +241,7 @@ class AuthController extends Controller
             }
 
             // Activer le compte
-            $user = User::where('email', $request->email)->first();
+            $user = User::where('email', 'ILIKE', $request->email)->first();
             $user->update(['is_active' => true]);
 
             // Marquer le code comme utilisé
@@ -311,7 +312,7 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            $user = User::where('email', $request->email)->first();
+            $user = User::where('email', 'ILIKE', $request->email)->first();
             
             if (!$user) {
                 // Ne pas révéler que l'email n'existe pas
@@ -419,7 +420,7 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            $user = User::where('email', $request->email)->first();
+            $user = User::where('email', 'ILIKE', $request->email)->first();
             
             if (!$user) {
                 return response()->json([
@@ -470,7 +471,7 @@ class AuthController extends Controller
             }
 
             // Vérifier si l'utilisateur existe et n'est pas encore activé
-            $user = User::where('email', $request->email)->first();
+            $user = User::where('email', 'ILIKE', $request->email)->first();
             
             if (!$user) {
                 return response()->json([
