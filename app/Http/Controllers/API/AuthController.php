@@ -45,6 +45,23 @@ class AuthController extends Controller
                 ], 422);
             }
 
+            // Vérification manuelle de l'unicité insensible à la casse (PostgreSQL)
+            $existingUser = User::where('pseudo', 'ILIKE', $request->pseudo)
+                ->orWhere('email', 'ILIKE', $request->email)
+                ->first();
+
+            if ($existingUser) {
+                $isPseudoTaken = strtolower($existingUser->pseudo ?? '') === strtolower($request->pseudo ?? '');
+                $field = $isPseudoTaken ? 'pseudo' : 'email';
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erreur de validation',
+                    'errors' => [
+                        $field => ["Ce " . ($isPseudoTaken ? 'pseudo' : 'email') . " est déjà utilisé."]
+                    ]
+                ], 422);
+            }
+
             // ⚠️ SÉCURITÉ : Toujours forcer role = 'user' pour les inscriptions publiques
             // Le champ 'role' dans la requête est IGNORÉ pour éviter l'élévation de privilèges
             // Les admins doivent être créés uniquement via le panel d'administration
