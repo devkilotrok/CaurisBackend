@@ -27,6 +27,7 @@ class AuthController extends Controller
         try {
             // Validation
             $validator = Validator::make($request->all(), [
+                'name' => 'required|string|max:255',
                 'pseudo' => 'required|string|max:50|unique:users',
                 'email' => 'required|string|email|max:100|unique:users',
                 'password' => 'required|string|min:8',
@@ -67,12 +68,8 @@ class AuthController extends Controller
             // Les admins doivent être créés uniquement via le panel d'administration
             
             // Créer l'utilisateur inactif avec role = 'user' (toujours)
-            // On remplit 'name' avec first_name + last_name ou le pseudo par défaut
-            $fullName = trim(($request->first_name ?? '') . ' ' . ($request->last_name ?? ''));
-            if (empty($fullName)) $fullName = $request->pseudo;
-
             $user = User::create([
-                'name' => $fullName,
+                'name' => $request->name,
                 'pseudo' => $request->pseudo,
                 'email' => $request->email,
                 'password_hash' => Hash::make($request->password),
