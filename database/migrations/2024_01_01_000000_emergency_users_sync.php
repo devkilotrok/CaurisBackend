@@ -20,15 +20,6 @@ return new class extends Migration
                     $table->string('pseudo', 50)->nullable();
                 }
 
-                // PostgreSql vs MySQL fix: make 'name' nullable if it exists (Laravel default migration legacy)
-                if (Schema::hasColumn('users', 'name')) {
-                    if (DB::getDriverName() === 'pgsql') {
-                        DB::statement('ALTER TABLE users ALTER COLUMN name DROP NOT NULL');
-                    } else {
-                        $table->string('name')->nullable()->change();
-                    }
-                }
-
                 // Pre-add is_admin if missing (Satisfies roles and remove_is_admin migrations)
                 if (!Schema::hasColumn('users', 'is_admin')) {
                     $table->boolean('is_admin')->default(false);
