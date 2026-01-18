@@ -24,6 +24,10 @@ if [ -z "${APP_KEY:-}" ] && [ ! -f /var/www/html/.env ]; then
   echo "WARNING: APP_KEY is not set. Set it in Render environment variables."
 fi
 
+# Run database migrations automatically
+echo "Running database migrations..."
+php /var/www/html/artisan migrate --force || echo "Migration failed, continuing..."
+
 # (Optional) Warm caches if env is present; ignore failures during first boot.
 if [ -f /var/www/html/.env ] || [ -n "${APP_KEY:-}" ]; then
   php /var/www/html/artisan config:cache || true
