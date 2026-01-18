@@ -31,12 +31,19 @@ return new class extends Migration
         // Mettre à jour les rôles existants basés sur is_admin et pseudo
         // (uniquement si la colonne existe maintenant ou si elle existait déjà)
         if (Schema::hasColumn('users', 'role')) {
+            $hasPseudo = Schema::hasColumn('users', 'pseudo');
+            $hasIsAdmin = Schema::hasColumn('users', 'is_admin');
+            
+            $casePseudoSuper = $hasPseudo ? "pseudo = 'superAdmin' OR " : "";
+            $casePseudoManager = $hasPseudo ? "pseudo = 'manageradmin' OR " : "";
+            $caseIsAdmin = $hasIsAdmin ? "WHEN is_admin = true OR is_admin::text = '1' THEN 'admin'" : "";
+
             DB::statement("
                 UPDATE users 
                 SET role = CASE 
-                    WHEN pseudo = 'superAdmin' OR email = 'superadmin@cauris.com' THEN 'superadmin'
-                    WHEN pseudo = 'manageradmin' OR email = 'manageradmin@cauris.com' THEN 'manager'
-                    WHEN is_admin = 1 THEN 'admin'
+                    WHEN {$casePseudoSuper}email = 'superadmin@cauris.com' THEN 'superadmin'
+                    WHEN {$casePseudoManager}email = 'manageradmin@cauris.com' THEN 'manager'
+                    {$caseIsAdmin}
                     ELSE 'user'
                 END
                 WHERE role IS NULL OR role = ''

@@ -25,7 +25,12 @@ return new class extends Migration
         if (Schema::hasColumn('users', 'is_admin')) {
             // Supprimer l'index idx_is_admin s'il existe (via SQL direct)
             try {
-                DB::statement('ALTER TABLE users DROP INDEX idx_is_admin');
+                // PostgreSql vs MySQL index drop
+                if (DB::getDriverName() === 'pgsql') {
+                    DB::statement('DROP INDEX IF EXISTS idx_is_admin');
+                } else {
+                    DB::statement('ALTER TABLE users DROP INDEX IF EXISTS idx_is_admin');
+                }
             } catch (\Exception $e) {
                 // L'index n'existe peut-être pas, continuer
             }
@@ -54,8 +59,8 @@ return new class extends Migration
             DB::statement("
                 UPDATE users 
                 SET is_admin = CASE 
-                    WHEN role IN ('superadmin', 'admin', 'manager') THEN 1
-                    ELSE 0
+                    WHEN role IN ('superadmin', 'admin', 'manager') THEN true
+                    ELSE false
                 END
             ");
         }
