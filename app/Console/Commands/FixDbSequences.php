@@ -103,10 +103,8 @@ class FixDbSequences extends Command
 
         $this->info("Database sequences fixed successfully.");
         
-        // Output for Artisan::output()
-        if (app()->runningInConsole()) {
-            $this->line(json_encode($results));
-        }
+        // Output for Artisan::output() capture
+        $this->line(json_encode($results));
 
         return 0;
     }
