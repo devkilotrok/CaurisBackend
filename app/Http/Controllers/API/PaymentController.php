@@ -36,8 +36,10 @@ class PaymentController extends Controller
             $user = $request->user();
             
             return $this->apiResponse(true, 'Solde récupéré', [
-                'balance' => $user->cauris_balance ?? 0,
-                'company_balance' => $this->getCompanyBalance(),
+                'cauris_balance' => (int)($user->cauris_balance ?? 0),
+                'balance' => (int)($user->cauris_balance ?? 0),
+                'solde' => (int)($user->cauris_balance ?? 0),
+                'company_balance' => (int)$this->getCompanyBalance(),
             ], 200, false);
 
         } catch (\Exception $e) {
