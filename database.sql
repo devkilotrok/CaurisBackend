@@ -18,20 +18,29 @@ USE cauris_db;
 -- =====================================================
 CREATE TABLE IF NOT EXISTS users (
     user_id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(255) NULL,
     pseudo VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    avatar VARCHAR(255) DEFAULT 'default_avatar.png',
+    first_name VARCHAR(50) NULL,
+    last_name VARCHAR(50) NULL,
+    phone VARCHAR(20) NULL,
+    address TEXT NULL,
+    avatar VARCHAR(255) DEFAULT '👤',
     theme_preference VARCHAR(20) DEFAULT 'light',
+    role ENUM('superadmin', 'admin', 'manager', 'user') DEFAULT 'user',
     is_admin BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
+    is_bot BOOLEAN DEFAULT FALSE,
+    cauris_balance INT DEFAULT 0,
     last_login TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_pseudo (pseudo),
     INDEX idx_email (email),
     INDEX idx_is_admin (is_admin),
-    INDEX idx_is_active (is_active)
+    INDEX idx_is_active (is_active),
+    INDEX idx_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================
@@ -269,6 +278,27 @@ CREATE TABLE IF NOT EXISTS admin_logs (
     FOREIGN KEY (admin_user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     INDEX idx_admin_user (admin_user_id),
     INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLE: admin_messages (Messages d'administration)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS admin_messages (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    sender_id INT NOT NULL,
+    recipient_id INT NULL,
+    subject VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    status ENUM('unread', 'read', 'replied') DEFAULT 'unread',
+    parent_id INT NULL,
+    read_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (recipient_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_id) REFERENCES admin_messages(id) ON DELETE CASCADE,
+    INDEX idx_sender (sender_id),
+    INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================
