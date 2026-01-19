@@ -123,7 +123,9 @@ class AuthController extends Controller
                     'avatar' => $user->avatar,
                     'role' => $user->role,
                     'is_active' => $user->is_active,
-                    'cauris_balance' => $user->cauris_balance ?? 0,
+                    'cauris_balance' => (int)($user->cauris_balance ?? 0),
+                    'balance' => (int)($user->cauris_balance ?? 0),
+                    'solde' => (int)($user->cauris_balance ?? 0),
                 ],
             ], 201, false);
 

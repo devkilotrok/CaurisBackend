@@ -28,25 +28,22 @@ class UserController extends Controller
                 (($user->pseudo === 'manageradmin' || $user->email === 'manageradmin@cauris.com') ? 'manager' : 'user')
             );
 
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'user' => [
-                        'user_id' => $user->user_id,
-                        'pseudo' => $user->pseudo,
-                        'email' => $user->email,
-                        'avatar' => $user->avatar,
-                        'theme_preference' => $user->theme_preference,
-                        'role' => $role,
-                        'is_active' => $user->is_active,
-                        'last_login' => $user->last_login,
-                        'cauris_balance' => (int)($user->cauris_balance ?? 0),
-                        'balance' => (int)($user->cauris_balance ?? 0),
-                        'solde' => (int)($user->cauris_balance ?? 0),
-                        'stats' => $stats,
-                    ]
+            return $this->apiResponse(true, 'Profil récupéré', [
+                'user' => [
+                    'user_id' => $user->user_id,
+                    'pseudo' => $user->pseudo,
+                    'email' => $user->email,
+                    'avatar' => $user->avatar,
+                    'theme_preference' => $user->theme_preference,
+                    'role' => $role,
+                    'is_active' => $user->is_active,
+                    'last_login' => $user->last_login,
+                    'cauris_balance' => (int)($user->cauris_balance ?? 0),
+                    'balance' => (int)($user->cauris_balance ?? 0),
+                    'solde' => (int)($user->cauris_balance ?? 0),
+                    'stats' => $stats,
                 ]
-            ], 200);
+            ], 200, false);
 
         } catch (\Exception $e) {
             return response()->json([
