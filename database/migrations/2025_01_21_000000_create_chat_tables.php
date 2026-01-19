@@ -14,9 +14,9 @@ return new class extends Migration
         // Table des conversations de chat
         Schema::create('chat_conversations', function (Blueprint $table) {
             $table->id();
-            $table->integer('user_id');
+            $table->unsignedBigInteger('user_id');
             $table->enum('status', ['active', 'waiting_manager', 'with_manager', 'closed'])->default('active');
-            $table->integer('assigned_manager_id')->nullable();
+            $table->unsignedBigInteger('assigned_manager_id')->nullable();
             $table->enum('assistant_type', ['ai', 'manager'])->default('ai');
             $table->timestamp('last_message_at')->nullable();
             $table->timestamps();
