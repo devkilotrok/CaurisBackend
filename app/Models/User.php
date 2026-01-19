@@ -51,6 +51,8 @@ class User extends Authenticatable
         'is_active' => 'boolean',
         'is_bot' => 'boolean',
         'is_admin' => 'boolean',
+        'cauris_balance' => 'integer',
+        'company_balance' => 'integer',
         'last_login' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',

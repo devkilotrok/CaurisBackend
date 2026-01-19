@@ -198,13 +198,20 @@ class AdminController extends Controller
             $lastLine = end($lines);
             $details = json_decode($lastLine, true);
 
+            // Diagnostics sur les données utilisateurs
+            $usersSnapshot = User::select('user_id', 'pseudo', 'email', 'cauris_balance', 'role', 'is_admin')
+                ->orderBy('user_id', 'asc')
+                ->limit(10)
+                ->get();
+
             // Diagnostics système
             $diagnostics = [
                 'db_driver' => DB::getDriverName(),
                 'db_connection' => config('database.default'),
                 'user_id' => $request->user() ? $request->user()->user_id : 'via_token',
                 'user_role' => $request->user() ? $request->user()->role : 'N/A',
-                'schema_updates' => $schemaReport
+                'schema_updates' => $schemaReport,
+                'users_sample' => $usersSnapshot
             ];
 
             return response()->json([
