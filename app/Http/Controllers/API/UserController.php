@@ -158,13 +158,15 @@ class UserController extends Controller
      */
     private function calculateUserStats($userId)
     {
-        // TODO: Implémenter le calcul des statistiques depuis la base de données
+        $user = User::find($userId);
+        
         return [
-            'total_games' => 0,
-            'games_won' => 0,
+            'total_games' => DB::table('room_players')->where('user_id', $userId)->count(),
+            'games_won' => 0, // À implémenter avec la table scores plus tard
             'games_lost' => 0,
             'avg_score' => 0,
-            'best_score' => 0,
+            'best_score' => (int)DB::table('scores')->where('user_id', $userId)->max('score') ?? 0,
+            'current_balance' => (int)($user->cauris_balance ?? 0),
         ];
     }
 }
