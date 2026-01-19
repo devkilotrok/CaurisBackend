@@ -90,8 +90,12 @@ class FixDbSequences extends Command
         if ($dryRun) {
             $this->line("[DRY RUN] Would run: {$sql}");
         } else {
-            DB::statement($sql);
-            $this->info("MySQL: Set AUTO_INCREMENT for '{$table}' to {$nextId}");
+            try {
+                DB::statement($sql);
+                $this->info("MySQL: Set AUTO_INCREMENT for '{$table}' to {$nextId}");
+            } catch (\Exception $e) {
+                $this->error("Failed to set AUTO_INCREMENT for '{$table}': " . $e->getMessage());
+            }
         }
     }
 

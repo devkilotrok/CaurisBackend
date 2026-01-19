@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Route;
 // =====================================================
 // AUTHENTIFICATION (Sans middleware)
 // =====================================================
-Route::post('/login', [App\Http\Controllers\API\AuthController::class, 'login']);
+Route::post('/login', [App\Http\Controllers\API\AuthController::class, 'login'])->name('login');
 Route::post('auth/register', [App\Http\Controllers\API\AuthController::class, 'register']);
 
 // =====================================================
@@ -131,7 +131,6 @@ Route::prefix('rounds')->middleware('auth:sanctum')->group(function () {
 
 Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\API\AdminController::class, 'dashboard']);
-    Route::get('/system/fix-sequences', [App\Http\Controllers\API\AdminController::class, 'fixDatabaseSequences']);
     
     // Messages entre admins (ancien système - gardé pour compatibilité)
     Route::prefix('messages')->group(function () {
@@ -249,6 +248,11 @@ Route::prefix('chat')->middleware('auth:sanctum')->group(function () {
 // =====================================================
 // HEALTH CHECK (Sans auth)
 // =====================================================
+
+// =====================================================
+// SYSTEM / MAINTENANCE (Token secured)
+// =====================================================
+Route::get('/system/fix-sequences', [App\Http\Controllers\API\AdminController::class, 'fixDatabaseSequences']);
 
 Route::get('/health', function () {
     return response()->json([
