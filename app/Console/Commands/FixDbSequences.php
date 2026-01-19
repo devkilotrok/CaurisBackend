@@ -33,7 +33,7 @@ class FixDbSequences extends Command
         $tables = [
             'users' => 'user_id',
             'rooms' => 'room_id',
-            'room_players' => 'player_id', // Found in RoomPlayer model
+            'room_players' => 'player_id',
             'transactions' => 'transaction_id',
             'games' => 'game_id',
             'rounds' => 'round_id',
@@ -43,7 +43,6 @@ class FixDbSequences extends Command
             'friendships' => 'friendship_id',
             'friend_requests' => 'request_id',
             'player_replacements' => 'replacement_id',
-            'player_disconnections' => 'id',
             'admin_messages' => 'id',
             'admin_logs' => 'log_id',
             'announcements' => 'announcement_id',
@@ -53,34 +52,61 @@ class FixDbSequences extends Command
             'email_verification_codes' => 'code_id',
         ];
 
-        $dryRun = $this->option('dry-run');
+        $results = [
+            'driver' => $driver,
+            'tables' => []
+        ];
 
         foreach ($tables as $table => $primaryKey) {
             if (!Schema::hasTable($table)) {
-                $this->warn("Table '{$table}' does not exist, skipping.");
+                $this->warn("Table '{$table}' does not exist. Skipping.");
+                $results['tables'][$table] = ['status' => 'not_found'];
                 continue;
             }
 
-            // Verify column exists
+            // Check if primary key column exists
             if (!Schema::hasColumn($table, $primaryKey)) {
-                $this->error("Column '{$primaryKey}' does not exist in table '{$table}'.");
+                $this->warn("Column '{$primaryKey}' not found in table '{$table}'. Skipping.");
+                $results['tables'][$table] = ['status' => 'column_missing'];
                 continue;
             }
 
+            $count = DB::table($table)->count();
             $maxId = DB::table($table)->max($primaryKey);
             $nextId = ($maxId ?? 0) + 1;
 
-            if ($driver === 'mysql') {
-                $this->fixMysql($table, $nextId, $dryRun);
-            } elseif ($driver === 'pgsql') {
-                $this->fixPgsql($table, $primaryKey, $nextId, $dryRun);
-            } else {
-                $this->error("Driver '{$driver}' is not supported for sequence fixing.");
-                return 1;
+            $status = [
+                'count' => $count,
+                'max_id' => $maxId,
+                'next_id' => $nextId,
+                'status' => 'success'
+            ];
+
+            try {
+                if ($driver === 'mysql') {
+                    $this->fixMysql($table, $nextId, $dryRun);
+                } elseif ($driver === 'pgsql') {
+                    $this->fixPgsql($table, $primaryKey, $nextId, $dryRun);
+                } else {
+                    $this->error("Driver '{$driver}' is not supported for sequence fixing.");
+                    $status['status'] = 'unsupported_driver';
+                }
+            } catch (\Exception $e) {
+                $this->error("Error fixing '{$table}': " . $e->getMessage());
+                $status['status'] = 'error';
+                $status['error'] = $e->getMessage();
             }
+
+            $results['tables'][$table] = $status;
         }
 
-        $this->info('Done!');
+        $this->info("Database sequences fixed successfully.");
+        
+        // Output for Artisan::output()
+        if (app()->runningInConsole()) {
+            $this->line(json_encode($results));
+        }
+
         return 0;
     }
 

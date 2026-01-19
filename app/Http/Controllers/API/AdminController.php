@@ -163,23 +163,44 @@ class AdminController extends Controller
             $isValidToken = ($secretToken === 'cauris_fix_2024'); // Token temporaire pour débloquer l'utilisateur
             
             if (!$isValidToken) {
+                if (!$request->user()) {
+                    return response()->json(['success' => false, 'message' => 'Non authentifié'], 401);
+                }
                 $this->checkAdminAccess($request->user());
             }
             
             // Appel de la commande artisan que nous avons créée
             Artisan::call('db:fix-sequences');
             $output = Artisan::output();
+            
+            // Tenter de parser le JSON à la fin de l'output
+            $lines = explode("\n", trim($output));
+            $lastLine = end($lines);
+            $details = json_decode($lastLine, true);
+
+            // Diagnostics système supplémentaires
+            $diagnostics = [
+                'db_driver' => DB::getDriverName(),
+                'db_connection' => config('database.default'),
+                'php_version' => PHP_VERSION,
+                'user_id' => $request->user() ? $request->user()->user_id : 'via_token',
+                'user_balance' => $request->user() ? $request->user()->cauris_balance : 'N/A',
+                'superadmin_balance' => User::where('role', 'superadmin')->value('cauris_balance') ?? 0,
+            ];
 
             return response()->json([
                 'success' => true,
-                'message' => 'Séquences de la base de données corrigées avec succès',
-                'output' => $output
+                'message' => 'Séquences de la base de données analysées/corrigées',
+                'diagnostics' => $diagnostics,
+                'details' => $details ?? 'Format de sortie non-JSON',
+                'raw_output' => $output
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la correction des séquences : ' . $e->getMessage()
+                'message' => 'Erreur lors de la correction des séquences : ' . $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ], 500);
         }
     }
