@@ -71,6 +71,12 @@ trait TransformsResponse
 
             $newKey = Str::camel($key);
             $transformed[$newKey] = $this->transformToCamelCase($value);
+            
+            // CONSERVER la clé originale si elle est différente de la version camelCase
+            // C'est crucial pour la compatibilité avec le code existant qui attend du snake_case
+            if ($newKey !== $key) {
+                $transformed[$key] = $this->transformToCamelCase($value);
+            }
         }
 
         return $transformed;

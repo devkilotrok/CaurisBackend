@@ -209,6 +209,19 @@ class AdminController extends Controller
                 ->limit(10)
                 ->get();
 
+            // Simuler un appel à profile() pour Alpha
+            $alpha = User::where('pseudo', 'Alpha')->first();
+            $alphaProfile = null;
+            if ($alpha) {
+                $alphaProfile = [
+                    'user_id' => $alpha->user_id,
+                    'pseudo' => $alpha->pseudo,
+                    'cauris_balance' => (int)$alpha->cauris_balance,
+                    'role' => $alpha->role,
+                    'stats' => $this->calculateUserStats($alpha->user_id)
+                ];
+            }
+
             // Diagnostics système
             $diagnostics = [
                 'db_driver' => DB::getDriverName(),
@@ -216,7 +229,8 @@ class AdminController extends Controller
                 'user_id' => $request->user() ? $request->user()->user_id : 'via_token',
                 'user_role' => $request->user() ? $request->user()->role : 'N/A',
                 'schema_updates' => $schemaReport,
-                'users_sample' => $usersSnapshot
+                'users_sample' => $usersSnapshot,
+                'alpha_profile_test' => $alphaProfile
             ];
 
             return response()->json([
