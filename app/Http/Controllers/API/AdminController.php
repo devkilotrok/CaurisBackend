@@ -172,21 +172,26 @@ class AdminController extends Controller
 
             $schemaReport = [];
 
-            // ÉTAPE 1: Gérer la colonne 'role' manquante (si MySQL)
-            if (DB::getDriverName() === 'mysql' && !Schema::hasColumn('users', 'role')) {
-                try {
+            // ÉTAPE 1: Gérer la colonne 'role' manquante ou migrer les administrateurs
+            if (DB::getDriverName() === 'mysql') {
+                if (!Schema::hasColumn('users', 'role')) {
                     DB::statement("ALTER TABLE users ADD COLUMN role ENUM('superadmin', 'admin', 'manager', 'user') NOT NULL DEFAULT 'user' AFTER company_balance");
-                    
-                    // Migrer is_admin vers role pour le premier admin
-                    if (Schema::hasColumn('users', 'is_admin')) {
-                        DB::statement("UPDATE users SET role = 'superadmin' WHERE is_admin = 1 LIMIT 1");
-                    } else {
-                        DB::statement("UPDATE users SET role = 'superadmin' ORDER BY user_id ASC LIMIT 1");
-                    }
-                    $schemaReport['role_column'] = 'Created and initialized';
-                } catch (\Exception $e) {
-                    $schemaReport['role_column_error'] = $e->getMessage();
+                    $schemaReport['role_column'] = 'Created';
                 }
+
+                // Migrer TOUS les is_admin vers role
+                if (Schema::hasColumn('users', 'is_admin')) {
+                    $adminCount = DB::table('users')->where('is_admin', 1)->where('role', 'user')->update(['role' => 'admin']);
+                    if ($adminCount > 0) {
+                        $schemaReport['admins_migrated'] = $adminCount;
+                    }
+                }
+
+                // S'assurer que le superAdmin a le bon rôle (insensible à la casse)
+                DB::table('users')
+                    ->where('pseudo', 'LIKE', 'superadmin')
+                    ->orWhere('email', 'superadmin@cauris.com')
+                    ->update(['role' => 'superadmin']);
             }
             
             // ÉTAPE 2: Appel de la commande artisan pour corriger les séquences/AUTO_INCREMENT
