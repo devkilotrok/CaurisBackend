@@ -11,6 +11,7 @@ use App\Models\AdminLog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schema;
 use App\Mail\AccountBannedEmail;
 use App\Mail\AccountUnbannedEmail;
 use App\Mail\AccountDeletedEmail;
@@ -184,9 +185,24 @@ class AdminController extends Controller
                 'db_connection' => config('database.default'),
                 'php_version' => PHP_VERSION,
                 'user_id' => $request->user() ? $request->user()->user_id : 'via_token',
-                'user_balance' => $request->user() ? $request->user()->cauris_balance : 'N/A',
-                'superadmin_balance' => User::where('role', 'superadmin')->value('cauris_balance') ?? 0,
+                'users_table_columns' => Schema::getColumnListing('users'),
             ];
+
+            try {
+                $diagnostics['user_balance'] = $request->user() ? $request->user()->cauris_balance : 'N/A';
+            } catch (\Exception $e) {
+                $diagnostics['user_balance_error'] = $e->getMessage();
+            }
+
+            try {
+                if (Schema::hasColumn('users', 'role')) {
+                    $diagnostics['superadmin_balance'] = User::where('role', 'superadmin')->value('cauris_balance') ?? 0;
+                } else {
+                    $diagnostics['superadmin_balance'] = 'Column "role" missing';
+                }
+            } catch (\Exception $e) {
+                $diagnostics['superadmin_balance_error'] = $e->getMessage();
+            }
 
             return response()->json([
                 'success' => true,
