@@ -26,11 +26,7 @@ return new class extends Migration
             // Supprimer l'index idx_is_admin s'il existe (via SQL direct)
             try {
                 // PostgreSql vs MySQL index drop
-                if (DB::getDriverName() === 'pgsql') {
-                    DB::statement('DROP INDEX IF EXISTS idx_is_admin');
-                } else {
-                    DB::statement('ALTER TABLE users DROP INDEX IF EXISTS idx_is_admin');
-                }
+                DB::statement('ALTER TABLE users DROP INDEX idx_is_admin');
             } catch (\Exception $e) {
                 // L'index n'existe peut-être pas, continuer
             }

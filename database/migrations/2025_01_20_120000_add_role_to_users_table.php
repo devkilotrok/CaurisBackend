@@ -36,7 +36,7 @@ return new class extends Migration
             
             $casePseudoSuper = $hasPseudo ? "pseudo = 'superAdmin' OR " : "";
             $casePseudoManager = $hasPseudo ? "pseudo = 'manageradmin' OR " : "";
-            $caseIsAdmin = $hasIsAdmin ? "WHEN is_admin = true OR is_admin::text = '1' THEN 'admin'" : "";
+            $caseIsAdmin = $hasIsAdmin ? "WHEN is_admin = true THEN 'admin'" : "";
 
             try {
                 DB::statement("
