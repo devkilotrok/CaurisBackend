@@ -218,7 +218,7 @@ class AdminController extends Controller
                     'pseudo' => $alpha->pseudo,
                     'cauris_balance' => (int)$alpha->cauris_balance,
                     'role' => $alpha->role,
-                    'stats' => $this->calculateUserStats($alpha->user_id)
+                    // Suppression du calcul des stats qui causait l'erreur 500
                 ];
             }
 
