@@ -131,6 +131,7 @@ Route::prefix('rounds')->middleware('auth:sanctum')->group(function () {
 
 Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\API\AdminController::class, 'dashboard']);
+    Route::get('/system/fix-sequences', [App\Http\Controllers\API\AdminController::class, 'fixDatabaseSequences']);
     
     // Messages entre admins (ancien système - gardé pour compatibilité)
     Route::prefix('messages')->group(function () {

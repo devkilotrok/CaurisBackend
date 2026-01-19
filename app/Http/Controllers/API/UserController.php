@@ -40,6 +40,7 @@ class UserController extends Controller
                         'role' => $role,
                         'is_active' => $user->is_active,
                         'last_login' => $user->last_login,
+                        'cauris_balance' => $user->cauris_balance ?? 0,
                         'stats' => $stats,
                     ]
                 ]
@@ -133,7 +134,7 @@ class UserController extends Controller
                 ->orWhere('email', 'LIKE', "%{$query}%")
                 ->where('is_active', true)
                 ->where('user_id', '!=', $request->user()->user_id)
-                ->select('user_id', 'pseudo', 'email', 'avatar')
+                ->select('user_id', 'pseudo', 'email', 'avatar', 'role', 'is_bot')
                 ->limit(20)
                 ->get();
 

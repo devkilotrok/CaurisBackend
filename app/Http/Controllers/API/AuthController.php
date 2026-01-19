@@ -120,6 +120,10 @@ class AuthController extends Controller
                     'user_id' => $user->user_id,
                     'pseudo' => $user->pseudo,
                     'email' => $user->email,
+                    'avatar' => $user->avatar,
+                    'role' => $user->role,
+                    'is_active' => $user->is_active,
+                    'cauris_balance' => $user->cauris_balance ?? 0,
                 ],
             ], 201, false);
 

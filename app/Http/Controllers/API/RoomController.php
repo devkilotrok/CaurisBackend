@@ -268,6 +268,7 @@ class RoomController extends Controller
                     'status' => $room->status,
                     'players' => $room->players->map(function($player) {
                         return [
+                            'player_id' => $player->player_id,
                             'user_id' => $player->user_id,
                             'pseudo' => $player->user->pseudo,
                             'first_name' => $player->user->first_name ?? '',

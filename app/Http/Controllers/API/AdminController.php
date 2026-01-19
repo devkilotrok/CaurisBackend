@@ -10,6 +10,7 @@ use App\Models\Game;
 use App\Models\AdminLog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Artisan;
 use App\Mail\AccountBannedEmail;
 use App\Mail\AccountUnbannedEmail;
 use App\Mail\AccountDeletedEmail;
@@ -147,6 +148,32 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Erreur: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Corriger les séquences/AUTO_INCREMENT de la base de données
+     */
+    public function fixDatabaseSequences(Request $request)
+    {
+        try {
+            $this->checkAdminAccess($request->user());
+            
+            // Appel de la commande artisan que nous avons créée
+            Artisan::call('db:fix-sequences');
+            $output = Artisan::output();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Séquences de la base de données corrigées avec succès',
+                'output' => $output
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la correction des séquences : ' . $e->getMessage()
             ], 500);
         }
     }
