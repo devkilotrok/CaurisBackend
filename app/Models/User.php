@@ -33,6 +33,7 @@ class User extends Authenticatable
         'is_bot',
         'last_login',
         'cauris_balance',
+        'is_admin',
     ];
 
     /**
@@ -49,6 +50,7 @@ class User extends Authenticatable
     protected $casts = [
         'is_active' => 'boolean',
         'is_bot' => 'boolean',
+        'is_admin' => 'boolean',
         'last_login' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
@@ -109,6 +111,23 @@ class User extends Authenticatable
     public function getAuthPassword()
     {
         return $this->password_hash;
+    }
+
+    /**
+     * Accessor pour le rôle (gère la transition is_admin -> role)
+     */
+    public function getRoleAttribute($value)
+    {
+        if ($value) {
+            return $value;
+        }
+
+        // Fallback sur is_admin si la colonne role n'est pas remplie ou absente
+        if (isset($this->attributes['is_admin']) && $this->attributes['is_admin']) {
+            return 'admin';
+        }
+
+        return 'user';
     }
 
 }

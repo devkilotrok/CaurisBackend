@@ -169,53 +169,56 @@ class AdminController extends Controller
                 }
                 $this->checkAdminAccess($request->user());
             }
+
+            $schemaReport = [];
+
+            // ÉTAPE 1: Gérer la colonne 'role' manquante (si MySQL)
+            if (DB::getDriverName() === 'mysql' && !Schema::hasColumn('users', 'role')) {
+                try {
+                    DB::statement("ALTER TABLE users ADD COLUMN role ENUM('superadmin', 'admin', 'manager', 'user') NOT NULL DEFAULT 'user' AFTER company_balance");
+                    
+                    // Migrer is_admin vers role pour le premier admin
+                    if (Schema::hasColumn('users', 'is_admin')) {
+                        DB::statement("UPDATE users SET role = 'superadmin' WHERE is_admin = 1 LIMIT 1");
+                    } else {
+                        DB::statement("UPDATE users SET role = 'superadmin' ORDER BY user_id ASC LIMIT 1");
+                    }
+                    $schemaReport['role_column'] = 'Created and initialized';
+                } catch (\Exception $e) {
+                    $schemaReport['role_column_error'] = $e->getMessage();
+                }
+            }
             
-            // Appel de la commande artisan que nous avons créée
+            // ÉTAPE 2: Appel de la commande artisan pour corriger les séquences/AUTO_INCREMENT
             Artisan::call('db:fix-sequences');
             $output = Artisan::output();
             
-            // Tenter de parser le JSON à la fin de l'output
+            // Parser le JSON à la fin de l'output
             $lines = explode("\n", trim($output));
             $lastLine = end($lines);
             $details = json_decode($lastLine, true);
 
-            // Diagnostics système supplémentaires
+            // Diagnostics système
             $diagnostics = [
                 'db_driver' => DB::getDriverName(),
                 'db_connection' => config('database.default'),
-                'php_version' => PHP_VERSION,
                 'user_id' => $request->user() ? $request->user()->user_id : 'via_token',
-                'users_table_columns' => Schema::getColumnListing('users'),
+                'user_role' => $request->user() ? $request->user()->role : 'N/A',
+                'schema_updates' => $schemaReport
             ];
-
-            try {
-                $diagnostics['user_balance'] = $request->user() ? $request->user()->cauris_balance : 'N/A';
-            } catch (\Exception $e) {
-                $diagnostics['user_balance_error'] = $e->getMessage();
-            }
-
-            try {
-                if (Schema::hasColumn('users', 'role')) {
-                    $diagnostics['superadmin_balance'] = User::where('role', 'superadmin')->value('cauris_balance') ?? 0;
-                } else {
-                    $diagnostics['superadmin_balance'] = 'Column "role" missing';
-                }
-            } catch (\Exception $e) {
-                $diagnostics['superadmin_balance_error'] = $e->getMessage();
-            }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Séquences de la base de données analysées/corrigées',
+                'message' => 'Système analysé et corrigé',
                 'diagnostics' => $diagnostics,
-                'details' => $details ?? 'Format de sortie non-JSON',
+                'details' => $details,
                 'raw_output' => $output
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la correction des séquences : ' . $e->getMessage(),
+                'message' => 'Erreur critique : ' . $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ], 500);
         }

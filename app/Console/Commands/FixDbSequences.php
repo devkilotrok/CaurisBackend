@@ -27,6 +27,7 @@ class FixDbSequences extends Command
      */
     public function handle()
     {
+        $dryRun = $this->option('dry-run');
         $driver = DB::getDriverName();
         $this->info("Database driver detected: {$driver}");
 
