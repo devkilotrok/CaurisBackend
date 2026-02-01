@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Application Backend (Laravel)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: backend-cauris-app
+    restart: unless-stopped
+    container_name: cauris_app
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_DATABASE=cauris_db
+      - DB_USERNAME=root
+      - DB_PASSWORD=${DB_PASSWORD:-secret}
+    depends_on:
+      - mysql
+    networks:
+      - cauris-network
+    volumes:
+      - ./:/var/www/html
+      # Exclude dependencies so they don't sync back to host if different
+      # - /var/www/html/vendor
+      # - /var/www/html/node_modules
+
+  # Base de données (MySQL)
+  mysql:
+    image: mysql:8.0
+    container_name: cauris_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: cauris_db
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-secret}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - cauris-network
+
+  # Serveur WebSocket (Node.js)
+  websocket:
+    image: node:20-alpine
+    container_name: cauris_websocket
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./websocket-server:/app
+    # Installe les dépendances et lance le serveur
+    command: sh -c "npm install && node server.js"
+    ports:
+      - "3000:3000"
+    networks:
+      - cauris-network
+
+networks:
+  cauris-network:
+    driver: bridge
+
+volumes:
+  db_data:
