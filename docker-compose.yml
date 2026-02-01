@@ -1,7 +1,25 @@
 version: '3.8'
 
 services:
-  # Application Backend (Laravel)
+  # 1. Nginx Reverse Proxy (Frontend web server)
+  nginx:
+    image: nginx:alpine
+    container_name: cauris_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./public:/var/www/html/public
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
+      - ./docker/ssl:/etc/nginx/ssl
+    depends_on:
+      - app
+      - websocket
+    networks:
+      - cauris-network
+
+  # 2. Application Backend (Laravel)
   app:
     build:
       context: .
@@ -10,24 +28,46 @@ services:
     restart: unless-stopped
     container_name: cauris_app
     ports:
-      - "8080:8080"
+      - "8080:8080" # Optional: keep exposed for local debugging or remove for prod security
     environment:
+      # Database
+      - DB_CONNECTION=mysql
       - DB_HOST=mysql
       - DB_PORT=3306
       - DB_DATABASE=cauris_db
       - DB_USERNAME=root
       - DB_PASSWORD=${DB_PASSWORD:-secret}
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=null
+      - REDIS_PORT=6379
+      - CACHE_DRIVER=redis
+      - QUEUE_CONNECTION=redis
+      - SESSION_DRIVER=redis
+      # App Config
+      - APP_ENV=${APP_ENV:-production}
+      - APP_DEBUG=${APP_DEBUG:-false}
+      - APP_URL=${APP_URL:-http://localhost}
+      # Broadcasting (Internal to Docker Network)
+      - PUSHER_HOST=websocket
+      - PUSHER_PORT=3000
+      - PUSHER_SCHEME=http
+      - PUSHER_APP_ID=${PUSHER_APP_ID:-app-id}
+      - PUSHER_APP_KEY=${PUSHER_APP_KEY:-app-key}
+      - PUSHER_APP_SECRET=${PUSHER_APP_SECRET:-app-secret}
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - cauris-network
     volumes:
       - ./:/var/www/html
-      # Exclude dependencies so they don't sync back to host if different
-      # - /var/www/html/vendor
-      # - /var/www/html/node_modules
+      # Persist storage folder
+      - ./storage:/var/www/html/storage
 
-  # Base de données (MySQL)
+  # 3. Base de données (MySQL)
   mysql:
     image: mysql:8.0
     container_name: cauris_db
@@ -39,8 +79,23 @@ services:
       - db_data:/var/lib/mysql
     networks:
       - cauris-network
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Serveur WebSocket (Node.js)
+  # 4. Redis (Cache & Queue)
+  redis:
+    image: redis:7-alpine
+    container_name: cauris_redis
+    restart: always
+    volumes:
+      - redis_data:/data
+    networks:
+      - cauris-network
+
+  # 5. Serveur WebSocket (Node.js)
   websocket:
     image: node:20-alpine
     container_name: cauris_websocket
@@ -48,10 +103,12 @@ services:
     working_dir: /app
     volumes:
       - ./websocket-server:/app
-    # Installe les dépendances et lance le serveur
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
     command: sh -c "npm install && node server.js"
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     networks:
       - cauris-network
 
@@ -61,3 +118,4 @@ networks:
 
 volumes:
   db_data:
+  redis_data:

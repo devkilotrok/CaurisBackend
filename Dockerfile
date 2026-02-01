@@ -1,66 +1,66 @@
 FROM php:8.3-apache
 
-# Render sets $PORT; Apache must listen on that port.
-ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
-
+# Installer les dépendances système et extensions PHP
 RUN set -eux; \
   apt-get update; \
   apt-get install -y --no-install-recommends \
-    git \
-    unzip \
-    libpq-dev \
-    default-mysql-client \
-    libzip-dev \
+  git \
+  unzip \
+  libpq-dev \
+  libzip-dev \
+  libonig-dev \
+  libicu-dev \
   ; \
-  docker-php-ext-configure zip; \
+  # Installation des extensions PHP requises
   docker-php-ext-install -j"$(nproc)" \
-    pdo \
-    pdo_mysql \
-    pdo_pgsql \
-    zip \
+  pdo_mysql \
+  zip \
+  opcache \
+  intl \
+  bcmath \
   ; \
-  a2enmod rewrite headers; \
+  # Installation extension Redis via PECL
+  pecl install redis; \
+  docker-php-ext-enable redis; \
+  # Nettoyage
+  apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
-# Point Apache to Laravel's public/ directory
-RUN set -eux; \
-  sed -ri -e "s!/var/www/html!${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-available/*.conf; \
-  sed -ri -e "s!/var/www/!${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf; \
-  { \
-    echo '<Directory /var/www/html/public>'; \
-    echo '  AllowOverride All'; \
-    echo '  Require all granted'; \
-    echo '</Directory>'; \
-  } > /etc/apache2/conf-available/laravel.conf; \
-  a2enconf laravel
+# Configuration Apache pour Laravel
+ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
+RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
+RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
-# Install Composer (no need for separate image)
+# Activer le mod_rewrite
+RUN a2enmod rewrite headers
+
+# Configuration PHP Production
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+
+# Copier Composer depuis l'image officielle
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Copy only composer files first for better Docker layer caching
-# IMPORTANT: we run composer with --no-scripts here because artisan/bootstrap
-# are not copied yet (Laravel's post-autoload-dump runs artisan package:discover).
+# Étape 1: Copier seulement les fichiers de dépendances (cache docker layer)
 COPY composer.json composer.lock ./
-RUN set -eux; \
-  composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader --no-scripts
 
-# Copy application source
+# Étape 2: Installer les dépendances (sans scripts pour l'instant)
+RUN composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader --no-scripts
+
+# Étape 3: Copier le code source de l'application
 COPY . .
 
-# Now that the full app is present, run the Laravel composer scripts safely.
-RUN set -eux; \
-  php artisan package:discover --ansi || true
+# Étape 4: Assurer les permissions correctes
+RUN chown -R www-data:www-data /var/www/html \
+  && chmod -R 775 /var/www/html/storage \
+  && chmod -R 775 /var/www/html/bootstrap/cache
 
-# Ensure Laravel storage/cache folders exist and are writable
-RUN set -eux; \
-  mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache; \
-  chown -R www-data:www-data storage bootstrap/cache
+# Étape 5: Post-install scripts Laravel (now that code is present)
+RUN php artisan package:discover --ansi || true
 
+# Entrypoint script
 COPY ./docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 EXPOSE 8080
-
-ENTRYPOINT ["/entrypoint.sh"]
