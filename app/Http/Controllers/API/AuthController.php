@@ -143,10 +143,12 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         try {
-            // Validation
+            // Validation — accepter login, pseudo ou email (compatibilité app mobile)
             $validator = Validator::make($request->all(), [
-                'login' => 'required|string', // Pseudo ou Email
                 'password' => 'required|string',
+                'login' => 'nullable|string',
+                'pseudo' => 'nullable|string',
+                'email' => 'nullable|string',
             ]);
 
             if ($validator->fails()) {
@@ -157,10 +159,22 @@ class AuthController extends Controller
                 ], 422);
             }
 
+            $loginIdentifier = $request->input('login')
+                ?? $request->input('pseudo')
+                ?? $request->input('email');
+
+            if (!$loginIdentifier) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erreur de validation',
+                    'errors' => ['login' => ['Pseudo ou email requis.']]
+                ], 422);
+            }
+
             // Rechercher l'utilisateur par email ou pseudo
-            $user = User::where(function($query) use ($request) {
-                $query->where('email', $request->login)
-                      ->orWhere('pseudo', $request->login);
+            $user = User::where(function($query) use ($loginIdentifier) {
+                $query->where('email', $loginIdentifier)
+                      ->orWhere('pseudo', $loginIdentifier);
             })->first();
 
             if (!$user || !Hash::check($request->password, $user->password_hash)) {
@@ -209,20 +223,30 @@ class AuthController extends Controller
                 (($user->pseudo === 'manageradmin' || $user->email === 'manageradmin@cauris.com') ? 'manager' : 'user')
             );
 
-            return $this->apiResponse(true, 'Connexion réussie', [
+            $userPayload = [
+                'user_id' => $user->user_id,
+                'pseudo' => $user->pseudo,
+                'email' => $user->email,
+                'avatar' => $user->avatar,
+                'theme_preference' => $user->theme_preference,
+                'role' => $role,
+                'cauris_balance' => (int)($user->cauris_balance ?? 0),
+                'balance' => (int)($user->cauris_balance ?? 0),
+                'solde' => (int)($user->cauris_balance ?? 0),
+            ];
+
+            $payload = [
                 'token' => $token,
-                'user' => [
-                    'user_id' => $user->user_id,
-                    'pseudo' => $user->pseudo,
-                    'email' => $user->email,
-                    'avatar' => $user->avatar,
-                    'theme_preference' => $user->theme_preference,
-                    'role' => $role,
-                    'cauris_balance' => (int)($user->cauris_balance ?? 0),
-                    'balance' => (int)($user->cauris_balance ?? 0),
-                    'solde' => (int)($user->cauris_balance ?? 0),
-                ]
-            ], 200, false);
+                'user' => $userPayload,
+            ];
+            $transformed = $this->transformToCamelCase($payload);
+
+            // Format plat + data.* pour compatibilité app mobile / web
+            return response()->json(array_merge([
+                'success' => true,
+                'message' => 'Connexion réussie',
+                'data' => $transformed,
+            ], $transformed), 200);
 
         } catch (\Exception $e) {
             return response()->json([
