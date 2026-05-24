@@ -24,11 +24,31 @@ if [ -z "${APP_KEY:-}" ] && [ ! -f /var/www/html/.env ]; then
   echo "WARNING: APP_KEY is not set. Set it in Render environment variables."
 fi
 
-# Run database migrations automatically
-echo "Running database migrations..."
-if php /var/www/html/artisan migrate --force; then
-  echo "Migrations completed successfully."
+# Wait for PostgreSQL to be ready (Render DB may still be provisioning)
+echo "Waiting for database connection..."
+for i in $(seq 1 30); do
+  if php /var/www/html/artisan db:show >/dev/null 2>&1; then
+    echo "Database is ready."
+    break
+  fi
+  echo "Attempt ${i}/30: database not ready yet, retrying in 5s..."
+  sleep 5
+done
 
+# Run database migrations automatically (with retries)
+echo "Running database migrations..."
+MIGRATE_OK=false
+for i in $(seq 1 5); do
+  if php /var/www/html/artisan migrate --force; then
+    echo "Migrations completed successfully."
+    MIGRATE_OK=true
+    break
+  fi
+  echo "Migration attempt ${i}/5 failed, retrying in 10s..."
+  sleep 10
+done
+
+if [ "$MIGRATE_OK" = true ]; then
   echo "Running database seeders..."
   if php /var/www/html/artisan db:seed --force; then
     echo "Seeders completed successfully."
@@ -36,9 +56,8 @@ if php /var/www/html/artisan migrate --force; then
     echo "WARNING: Database seeding failed!"
   fi
 else
-  echo "CRITICAL: Database migrations failed!"
-  # In production, you might want to exit here if migrations are mandatory
-  # exit 1
+  echo "CRITICAL: Database migrations failed after 5 attempts!"
+  exit 1
 fi
 
 # (Optional) Warm caches if env is present; ignore failures during first boot.
