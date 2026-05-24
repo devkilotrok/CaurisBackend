@@ -18,6 +18,7 @@ return new class extends Migration
             'friendships' => 'friendship_id',
             'games' => 'game_id',
             'rooms' => 'room_id',
+            'room_players' => 'player_id',
             'rounds' => 'round_id',
             'room_invitations' => 'invitation_id',
             'scores' => 'score_id',
