@@ -251,6 +251,46 @@ class AdminController extends Controller
     }
 
     /**
+     * Migrations + seed (plan Render gratuit sans Shell).
+     * GET /api/system/setup?token=...&fresh=1 (optionnel)
+     */
+    public function setupDatabase(Request $request)
+    {
+        $expectedToken = env('DEPLOY_SETUP_TOKEN', 'cauris_setup_2026');
+        if ($request->get('token') !== $expectedToken) {
+            return response()->json(['success' => false, 'message' => 'Token invalide'], 401);
+        }
+
+        try {
+            if ($request->boolean('fresh')) {
+                Artisan::call('migrate:fresh', ['--force' => true]);
+            } else {
+                Artisan::call('migrate', ['--force' => true]);
+            }
+            $migrateOutput = Artisan::output();
+
+            Artisan::call('db:seed', ['--force' => true]);
+            $seedOutput = Artisan::output();
+
+            $users = User::whereIn('pseudo', ['Alpha', 'Elias', 'Geraulin', 'Grace'])
+                ->get(['pseudo', 'email', 'cauris_balance', 'is_active']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Base initialisée',
+                'migrate_output' => $migrateOutput,
+                'seed_output' => $seedOutput,
+                'test_users' => $users,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Liste des administrateurs (Super Admin uniquement)
      */
     public function getAdmins(Request $request)

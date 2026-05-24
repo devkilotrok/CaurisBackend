@@ -57,6 +57,8 @@ services:
         value: local
       - key: WEBSOCKET_SERVER_URL
         sync: false
+      - key: DEPLOY_SETUP_TOKEN
+        value: cauris_setup_2026
 
   - type: web
     name: cauris-websocket

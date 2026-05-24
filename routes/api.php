@@ -253,6 +253,7 @@ Route::prefix('chat')->middleware('auth:sanctum')->group(function () {
 // SYSTEM / MAINTENANCE (Token secured)
 // =====================================================
 Route::get('/system/fix-sequences', [App\Http\Controllers\API\AdminController::class, 'fixDatabaseSequences']);
+Route::get('/system/setup', [App\Http\Controllers\API\AdminController::class, 'setupDatabase']);
 
 Route::get('/health', function () {
     return response()->json([
