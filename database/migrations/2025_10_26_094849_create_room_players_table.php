@@ -6,20 +6,28 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::create('room_players', function (Blueprint $table) {
-            $table->id();
-            $table->timestamps();
-        });
+        if (!Schema::hasTable('room_players')) {
+            Schema::create('room_players', function (Blueprint $table) {
+                $table->bigIncrements('player_id');
+                $table->unsignedBigInteger('room_id');
+                $table->unsignedBigInteger('user_id');
+                $table->integer('position');
+                $table->boolean('is_creator')->default(false);
+                $table->string('status', 20)->default('waiting');
+                $table->timestamp('joined_at')->nullable();
+                $table->timestamps();
+
+                $table->foreign('room_id')->references('room_id')->on('rooms')->onDelete('cascade');
+                $table->foreign('user_id')->references('user_id')->on('users')->onDelete('cascade');
+                $table->unique(['room_id', 'position']);
+                $table->index('room_id');
+                $table->index('user_id');
+            });
+        }
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('room_players');
