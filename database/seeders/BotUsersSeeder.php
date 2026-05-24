@@ -2,55 +2,43 @@
 
 namespace Database\Seeders;
 
+use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
-use App\Models\User;
 
 class BotUsersSeeder extends Seeder
 {
     public function run(): void
     {
         $bots = [
-            ['first_name' => 'Lewis', 'last_name' => 'Bot', 'pseudo' => 'Lewis', 'email' => 'bot_lewis@example.com'],
-            ['first_name' => 'Bil',   'last_name' => 'Bot', 'pseudo' => 'Bil',   'email' => 'bot_bil@example.com'],
-            ['first_name' => 'Jonh',  'last_name' => 'Bot', 'pseudo' => 'Jonh',  'email' => 'bot_jonh@example.com'],
+            ['pseudo' => 'Lewis', 'email' => 'bot_lewis@cauris.local'],
+            ['pseudo' => 'Bil', 'email' => 'bot_bil@cauris.local'],
+            ['pseudo' => 'Jonh', 'email' => 'bot_jonh@cauris.local'],
+            ['pseudo' => 'Bot1', 'email' => 'bot1@cauris.local'],
+            ['pseudo' => 'Bot2', 'email' => 'bot2@cauris.local'],
+            ['pseudo' => 'Bot3', 'email' => 'bot3@cauris.local'],
         ];
 
         foreach ($bots as $bot) {
-            $data = [
-                'password' => Hash::make('CaurisBot123!'),
+            $attributes = [
+                'pseudo' => $bot['pseudo'],
+                'password_hash' => Hash::make('CaurisBot123!'),
+                'avatar' => '🤖',
+                'role' => 'user',
+                'is_active' => true,
                 'is_bot' => true,
-                'role' => 'admin',
+                'cauris_balance' => 0,
             ];
 
-            // Champs optionnels selon ton schéma réel
-            if (Schema::hasColumn('users', 'first_name')) {
-                $data['first_name'] = $bot['first_name'];
-            }
-            if (Schema::hasColumn('users', 'last_name')) {
-                $data['last_name'] = $bot['last_name'];
-            }
-            if (Schema::hasColumn('users', 'pseudo')) {
-                $data['pseudo'] = $bot['pseudo'];
-            }
             if (Schema::hasColumn('users', 'name')) {
-                $data['name'] = $bot['first_name'].' '.$bot['last_name'];
-            }
-            if (Schema::hasColumn('users', 'email_verified_at')) {
-                $data['email_verified_at'] = now();
-            }
-            if (Schema::hasColumn('users', 'remember_token')) {
-                $data['remember_token'] = Str::random(10);
+                $attributes['name'] = $bot['pseudo'];
             }
 
             User::updateOrCreate(
                 ['email' => $bot['email']],
-                $data
+                $attributes
             );
         }
     }
 }
-
-

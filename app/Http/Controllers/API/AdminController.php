@@ -275,12 +275,18 @@ class AdminController extends Controller
             $users = User::whereIn('pseudo', ['Alpha', 'Elias', 'Geraulin', 'Grace'])
                 ->get(['pseudo', 'email', 'cauris_balance', 'is_active']);
 
+            $bots = User::where('is_bot', true)
+                ->orderBy('pseudo')
+                ->get(['pseudo', 'email', 'is_active', 'is_bot']);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Base initialisée',
                 'migrate_output' => $migrateOutput,
                 'seed_output' => $seedOutput,
                 'test_users' => $users,
+                'bots' => $bots,
+                'bots_count' => $bots->count(),
             ]);
         } catch (\Exception $e) {
             return response()->json([

@@ -10,14 +10,17 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\RoomBotService;
 use App\Services\WebSocketService;
 
 class RoomController extends Controller
 {
     protected $wsService;
 
-    public function __construct(WebSocketService $wsService)
-    {
+    public function __construct(
+        WebSocketService $wsService,
+        private RoomBotService $roomBotService
+    ) {
         $this->wsService = $wsService;
     }
 
@@ -117,16 +120,33 @@ class RoomController extends Controller
 
             // ⚠️ NOTE: Le débit sera fait par le frontend via /api/payment/debit-room-bet
             // On ne débite pas ici car on ne sait pas encore si c'est mode bot ou humain
-            
+
             DB::commit();
 
-            return $this->apiResponse(true, 'Salle créée avec succès', [
+            $payload = [
                 'room_id' => $room->room_id,
                 'room_name' => $room->room_name,
                 'room_code' => $room->room_code,
                 'minimum_bet' => $room->minimum_bet,
-                'status' => $room->status
-            ], 201, false);
+                'status' => $room->status,
+            ];
+
+            $wantsBots = $request->boolean('play_with_bots')
+                || $request->boolean('with_bots')
+                || $request->boolean('vs_bots');
+
+            if ($wantsBots) {
+                try {
+                    $botResult = $this->roomBotService->fillRoom($room->fresh());
+                    $payload['players'] = $botResult['players'];
+                    $payload['bots_added'] = $botResult['added'];
+                } catch (\Exception $e) {
+                    Log::warning('Création salle OK mais fill bots échoué: ' . $e->getMessage());
+                    $payload['bots_fill_error'] = $e->getMessage();
+                }
+            }
+
+            return $this->apiResponse(true, 'Salle créée avec succès', $payload, 201, false);
 
         } catch (\Exception $e) {
             DB::rollBack();
