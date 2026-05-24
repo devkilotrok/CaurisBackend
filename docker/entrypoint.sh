@@ -28,6 +28,13 @@ fi
 echo "Running database migrations..."
 if php /var/www/html/artisan migrate --force; then
   echo "Migrations completed successfully."
+
+  echo "Running database seeders..."
+  if php /var/www/html/artisan db:seed --force; then
+    echo "Seeders completed successfully."
+  else
+    echo "WARNING: Database seeding failed!"
+  fi
 else
   echo "CRITICAL: Database migrations failed!"
   # In production, you might want to exit here if migrations are mandatory

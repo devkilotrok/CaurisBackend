@@ -41,6 +41,8 @@ services:
         fromDatabase:
           name: backendcauris-db
           property: password
+      - key: DB_SCHEMA
+        value: public
       - key: CACHE_DRIVER
         value: file
       - key: QUEUE_CONNECTION
@@ -53,6 +55,17 @@ services:
         value: log
       - key: FILESYSTEM_DISK
         value: local
+      - key: WEBSOCKET_SERVER_URL
+        sync: false
+
+  - type: web
+    name: cauris-websocket
+    runtime: node
+    plan: free
+    rootDir: websocket-server
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
 
 databases:
   - name: backendcauris-db
