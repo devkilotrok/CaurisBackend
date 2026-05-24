@@ -23,6 +23,10 @@ return new class extends Migration
                 $table->renameColumn('password', 'password_hash');
             }
 
+            if (!Schema::hasColumn('users', 'name')) {
+                $table->string('name')->nullable();
+            }
+
             // 3. Add 'pseudo' if mission
             if (!Schema::hasColumn('users', 'pseudo')) {
                 $table->string('pseudo', 50)->unique()->nullable(); // Temporarily nullable to avoid issues with existing data

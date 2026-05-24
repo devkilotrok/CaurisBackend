@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 class TestUsersSeeder extends Seeder
 {
@@ -18,19 +19,28 @@ class TestUsersSeeder extends Seeder
         ];
 
         foreach ($users as $u) {
+            $attributes = [
+                'pseudo' => $u['pseudo'],
+                'password_hash' => Hash::make('12345678'),
+                'avatar' => '👤',
+                'role' => 'user',
+                'is_active' => true,
+                'is_bot' => false,
+                'cauris_balance' => 1000,
+            ];
+
+            if (Schema::hasColumn('users', 'name')) {
+                $attributes['name'] = $u['pseudo'];
+            }
+
             $user = User::updateOrCreate(
                 ['email' => $u['email']],
-                [
-                    'name' => $u['pseudo'],
-                    'pseudo' => $u['pseudo'],
-                    'password_hash' => Hash::make('12345678'),
-                    'avatar' => '👤',
-                    'role' => 'user',
-                    'is_active' => true,
-                    'is_bot' => false,
-                    'cauris_balance' => 1000,
-                ]
+                $attributes
             );
+
+            if (!Schema::hasTable('user_settings') || !Schema::hasColumn('user_settings', 'user_id')) {
+                continue;
+            }
 
             $user->settings()->updateOrCreate(
                 ['user_id' => $user->user_id],
