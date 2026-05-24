@@ -19,8 +19,6 @@ return new class extends Migration
                 $table->timestamp('joined_at')->nullable();
                 $table->timestamps();
 
-                $table->foreign('room_id')->references('room_id')->on('rooms')->onDelete('cascade');
-                $table->foreign('user_id')->references('user_id')->on('users')->onDelete('cascade');
                 $table->unique(['room_id', 'position']);
                 $table->index('room_id');
                 $table->index('user_id');

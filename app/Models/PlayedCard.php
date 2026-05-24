@@ -9,7 +9,7 @@ class PlayedCard extends Model
 {
     use HasFactory;
 
-    protected $primaryKey = 'card_id';
+    protected $primaryKey = 'played_card_id';
     public $timestamps = false; // La table utilise played_at au lieu de created_at/updated_at
 
     protected $fillable = [

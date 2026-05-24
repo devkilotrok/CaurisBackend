@@ -6,20 +6,24 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::create('games', function (Blueprint $table) {
-            $table->id();
-            $table->timestamps();
-        });
+        if (!Schema::hasTable('games')) {
+            Schema::create('games', function (Blueprint $table) {
+                $table->bigIncrements('game_id');
+                $table->unsignedBigInteger('room_id');
+                $table->string('deck_id', 100);
+                $table->timestamp('started_at')->nullable();
+                $table->timestamp('finished_at')->nullable();
+                $table->unsignedBigInteger('winner_id')->nullable();
+                $table->json('final_scores')->nullable();
+                $table->timestamps();
+
+                $table->index('room_id');
+            });
+        }
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('games');

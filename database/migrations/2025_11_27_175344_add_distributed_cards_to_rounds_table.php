@@ -11,11 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('rounds', function (Blueprint $table) {
-            // ✅ Ajouter le champ pour stocker les cartes distribuées par joueur
-            // Format JSON: {"Alpha": ["AS", "KS", ...], "Bot1": ["AD", "KD", ...], ...}
-            $table->json('distributed_cards')->nullable()->after('obtained_tricks');
-        });
+        if (Schema::hasTable('rounds') && !Schema::hasColumn('rounds', 'distributed_cards')) {
+            Schema::table('rounds', function (Blueprint $table) {
+                $table->json('distributed_cards')->nullable();
+            });
+        }
     }
 
     /**

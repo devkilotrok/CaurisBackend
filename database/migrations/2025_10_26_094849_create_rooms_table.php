@@ -21,7 +21,6 @@ return new class extends Migration
                 $table->timestamp('started_at')->nullable();
                 $table->timestamp('finished_at')->nullable();
 
-                $table->foreign('creator_id')->references('user_id')->on('users')->onDelete('cascade');
                 $table->index('room_code');
                 $table->index('creator_id');
                 $table->index('status');
