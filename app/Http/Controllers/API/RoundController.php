@@ -469,8 +469,15 @@ class RoundController extends Controller
                 'data' => [
                     'round_number' => $data['round_number'],
                     'distribution' => $distribution,
-                    'game_id' => $game->game_id, // ✅ Inclure game_id dans la réponse pour le frontend
-                ]
+                    'game_id' => $game->game_id,
+                    'announcement_phase' => [
+                        'room_id' => (string) $data['room_id'],
+                        'game_id' => $game->game_id,
+                        'round_number' => $data['round_number'],
+                        'start_timestamp' => $startTimestamp,
+                        'duration' => 30,
+                    ],
+                ],
             ], 200);
 
         } catch (\Exception $e) {
