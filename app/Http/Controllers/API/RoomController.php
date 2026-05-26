@@ -433,6 +433,7 @@ class RoomController extends Controller
             'obtained_tricks' => $obtainedTricks,
             'announcements' => $announcementsMap,
             'announcements_count' => count($announcementsMap),
+            'distributed_cards' => $round->distributed_cards ?? [],
         ];
     }
 
