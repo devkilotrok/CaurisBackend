@@ -68,6 +68,7 @@ Route::prefix('rooms')->middleware('auth:sanctum')->group(function () {
     Route::post('/create', [App\Http\Controllers\API\RoomController::class, 'create']);
     Route::post('/join', [App\Http\Controllers\API\RoomController::class, 'join']);
     Route::post('/fill-bots', [App\Http\Controllers\API\RoomBotController::class, 'fill']);
+    Route::get('/{room_id}/sync', [App\Http\Controllers\API\RoomController::class, 'sync']);
     Route::get('/{room_id}', [App\Http\Controllers\API\RoomController::class, 'show']);
     Route::post('/{room_id}/start', [App\Http\Controllers\API\RoomController::class, 'start']);
     Route::post('/{room_id}/leave', [App\Http\Controllers\API\RoomController::class, 'leave']);

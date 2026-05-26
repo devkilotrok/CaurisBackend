@@ -4,8 +4,12 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Models\Announcement;
+use App\Models\Game;
 use App\Models\Room;
+use App\Models\RoomChatMessage;
 use App\Models\RoomPlayer;
+use App\Models\Round;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -280,27 +284,7 @@ class RoomController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'room_id' => $room->room_id,
-                    'room_name' => $room->room_name,
-                    'room_code' => $room->room_code,
-                    'minimum_bet' => $room->minimum_bet,
-                    'status' => $room->status,
-                    'players' => $room->players->map(function($player) {
-                        return [
-                            'player_id' => $player->player_id,
-                            'user_id' => $player->user_id,
-                            'pseudo' => $player->user->pseudo,
-                            'first_name' => $player->user->first_name ?? '',
-                            'last_name' => $player->user->last_name ?? '',
-                            'position' => $player->position,
-                            'is_creator' => $player->is_creator,
-                            'status' => $player->status,
-                            'is_bot' => $player->user->is_bot ?? 0, // ✅ Retourner is_bot depuis users
-                            'avatar' => $player->user->avatar ?? '',
-                        ];
-                    }),
-                ]
+                'data' => $this->formatRoomData($room),
             ], 200);
 
         } catch (\Exception $e) {
@@ -309,6 +293,196 @@ class RoomController extends Controller
                 'message' => 'Erreur: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * État consolidé pour le polling client (joueurs + manche + compteurs + annonces + chat).
+     * GET /api/rooms/{room_id}/sync?last_chat_id=123
+     */
+    public function sync(Request $request, $roomId)
+    {
+        try {
+            $roomId = (int) $roomId;
+            $room = Room::with(['creator', 'players.user'])->find($roomId);
+
+            if (!$room) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Salle non trouvée',
+                ], 404);
+            }
+
+            $user = $request->user();
+            $isMember = $user && RoomPlayer::where('room_id', $roomId)
+                ->where('user_id', $user->user_id)
+                ->exists();
+
+            $payload = $this->formatRoomData($room);
+            $payload['game_id'] = null;
+            $payload['round'] = null;
+            $payload['chat'] = $isMember
+                ? $this->formatChatSyncData($roomId, $request->query('last_chat_id'))
+                : ['messages' => [], 'last_chat_id' => null];
+
+            $game = Game::where('room_id', $roomId)
+                ->orderByDesc('game_id')
+                ->first();
+
+            if ($game) {
+                $payload['game_id'] = $game->game_id;
+
+                $round = Round::where('game_id', $game->game_id)
+                    ->orderByDesc('round_number')
+                    ->first();
+
+                if ($round) {
+                    $payload['round'] = $this->formatRoundSyncData($room, $round, $game->game_id);
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $payload,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Room sync failed', [
+                'room_id' => $roomId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatRoomData(Room $room): array
+    {
+        return [
+            'room_id' => $room->room_id,
+            'room_name' => $room->room_name,
+            'room_code' => $room->room_code,
+            'minimum_bet' => $room->minimum_bet,
+            'status' => $room->status,
+            'players' => $room->players->map(function ($player) {
+                return [
+                    'player_id' => $player->player_id,
+                    'user_id' => $player->user_id,
+                    'pseudo' => $player->user->pseudo,
+                    'first_name' => $player->user->first_name ?? '',
+                    'last_name' => $player->user->last_name ?? '',
+                    'position' => $player->position,
+                    'is_creator' => $player->is_creator,
+                    'status' => $player->status,
+                    'is_bot' => $player->user->is_bot ?? 0,
+                    'avatar' => $player->user->avatar ?? '',
+                ];
+            })->values()->all(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatRoundSyncData(Room $room, Round $round, int $gameId): array
+    {
+        $playerNames = $room->players->map(function ($player) {
+            return $player->user->pseudo ?? 'Joueur';
+        })->filter()->values();
+
+        $storedCounters = $round->obtained_tricks ?? [];
+        $obtainedTricks = [];
+        foreach ($playerNames as $name) {
+            $obtainedTricks[$name] = (int) ($storedCounters[$name] ?? 0);
+        }
+        foreach ($storedCounters as $name => $value) {
+            if (!isset($obtainedTricks[$name])) {
+                $obtainedTricks[$name] = (int) $value;
+            }
+        }
+
+        $announcements = Announcement::where('game_id', $gameId)
+            ->where('round_number', $round->round_number)
+            ->with('player.user')
+            ->get();
+
+        $announcementsMap = [];
+        foreach ($announcements as $announcement) {
+            $playerName = $announcement->player?->user?->pseudo ?? 'Joueur';
+            $announcementsMap[$playerName] = $announcement->announcement_value;
+        }
+
+        $secondsRemaining = null;
+        if ($round->status === Round::STATUS_ANNOUNCEMENT_PHASE && $round->announcement_end_at) {
+            $secondsRemaining = max(
+                0,
+                $round->announcement_end_at->timestamp - now()->timestamp
+            );
+        }
+
+        return [
+            'round_id' => $round->round_id,
+            'round_number' => $round->round_number,
+            'status' => $round->status,
+            'announcement_end_at' => $round->announcement_end_at?->toIso8601String(),
+            'announcement_seconds_remaining' => $secondsRemaining,
+            'obtained_tricks' => $obtainedTricks,
+            'announcements' => $announcementsMap,
+            'announcements_count' => count($announcementsMap),
+        ];
+    }
+
+    /**
+     * Messages de chat récents ou nouveaux depuis last_chat_id.
+     *
+     * @return array{messages: array<int, array<string, mixed>>, last_chat_id: int|null}
+     */
+    private function formatChatSyncData(int $roomId, $lastChatId): array
+    {
+        $lastChatId = $lastChatId !== null && $lastChatId !== ''
+            ? (int) $lastChatId
+            : null;
+
+        $query = RoomChatMessage::with('user')->where('room_id', $roomId);
+
+        if ($lastChatId) {
+            $messages = $query->where('id', '>', $lastChatId)
+                ->orderBy('id', 'asc')
+                ->limit(50)
+                ->get();
+        } else {
+            $messages = $query->orderBy('id', 'desc')
+                ->limit(30)
+                ->get()
+                ->sortBy('id')
+                ->values();
+        }
+
+        $formatted = $messages->map(function ($message) {
+            return [
+                'id' => $message->id,
+                'room_id' => $message->room_id,
+                'user_id' => $message->user_id,
+                'pseudo' => $message->user->pseudo ?? 'Joueur',
+                'message' => $message->message,
+                'message_type' => $message->message_type,
+                'preset_code' => $message->preset_code,
+                'created_at' => $message->created_at?->toISOString(),
+            ];
+        })->values()->all();
+
+        $maxId = !empty($formatted)
+            ? (int) max(array_column($formatted, 'id'))
+            : $lastChatId;
+
+        return [
+            'messages' => $formatted,
+            'last_chat_id' => $maxId,
+        ];
     }
 
     /**
