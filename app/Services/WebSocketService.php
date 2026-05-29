@@ -29,7 +29,7 @@ class WebSocketService
         try {
             // Option 1: Si le serveur WebSocket a un endpoint HTTP pour broadcaster
             // (nécessite de modifier server.js pour ajouter cet endpoint)
-            $response = Http::post("{$this->socketUrl}/broadcast", [
+            $response = Http::timeout(10)->post("{$this->socketUrl}/broadcast", [
                 'room_id' => $roomId,
                 'event' => $data['event'] ?? 'message',
                 'data' => $data['data'] ?? $data,

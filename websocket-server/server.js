@@ -276,14 +276,19 @@ app.post('/broadcast', (req, res) => {
     // Convertir room_id en string si c'est un nombre (pour compatibilité)
     const roomIdStr = String(room_id);
 
-    // Diffuser l'événement à tous les clients de la room
-    io.to(roomIdStr).emit(event, {
+    const payload = {
       ...data,
+      roomId: data.roomId ?? data.room_id ?? roomIdStr,
       room_id: roomIdStr,
-      timestamp: new Date().toISOString()
-    });
+      timestamp: new Date().toISOString(),
+    };
 
-    console.log(`📡 Broadcast: ${event} to room ${roomIdStr}`);
+    const room = io.sockets.adapter.rooms.get(roomIdStr);
+    const connectedCount = room ? room.size : 0;
+
+    io.to(roomIdStr).emit(event, payload);
+
+    console.log(`📡 Broadcast: ${event} to room ${roomIdStr} (${connectedCount} socket(s))`);
 
     res.json({
       success: true,
