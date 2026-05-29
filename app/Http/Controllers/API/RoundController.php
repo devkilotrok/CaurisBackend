@@ -320,17 +320,6 @@ class RoundController extends Controller
                 'expected_total' => $expectedTotalCards
             ]);
 
-            // Envoyer la distribution via WebSocket à tous les joueurs
-            $this->wsService->broadcastToRoom($data['room_id'], [
-                'event' => 'card_distribution',
-                'data' => [
-                    'roomId' => $data['room_id'],
-                    'distribution' => $distribution,
-                    'round_number' => $data['round_number'],
-                    'timestamp' => now()->toIso8601String(),
-                ],
-            ]);
-
             // Sauvegarder le hash du deck pour vérification
             $deckHash = hash('sha256', implode('-', $deck));
             $game = Game::firstOrCreate(
@@ -342,9 +331,7 @@ class RoundController extends Controller
             $startTimestamp = now()->timestamp;
             $announcementEndAt = now()->addSeconds(30);
             
-            // ✅ CRITIQUE: Mettre à jour le round dans la BDD AVANT toute autre opération
-            // Cela garantit que le statut est disponible immédiatement pour les appels API
-            // ⚠️ IMPORTANT: updateOrCreate met à jour TOUS les champs même si le round existe déjà
+            // ✅ CRITIQUE: Mettre à jour le round dans la BDD AVANT le broadcast WebSocket
             $round = Round::updateOrCreate(
                 [
                     'game_id' => $game->game_id,
@@ -425,11 +412,22 @@ class RoundController extends Controller
             ];
             Cache::put($cacheKey, $phaseData, 60);
 
+            // ✅ Broadcast cartes APRÈS persistance BDD (sync HTTP prêt pour les non-créateurs)
+            $this->wsService->broadcastToRoom($data['room_id'], [
+                'event' => 'card_distribution',
+                'data' => [
+                    'roomId' => (string) $data['room_id'],
+                    'distribution' => $distribution,
+                    'round_number' => $data['round_number'],
+                    'timestamp' => now()->toIso8601String(),
+                ],
+            ]);
+
             // ✅ Émettre l'événement announcement_phase_started APRÈS la mise à jour BDD
             $this->wsService->broadcastToRoom($data['room_id'], [
                 'event' => 'announcement_phase_started',
                 'data' => [
-                    'roomId' => $data['room_id'],
+                    'roomId' => (string) $data['room_id'],
                     'game_id' => $game->game_id, // ✅ Ajouter game_id pour que le frontend puisse l'utiliser
                     'round_number' => $data['round_number'],
                     'start_timestamp' => $startTimestamp,

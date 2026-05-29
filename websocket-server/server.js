@@ -31,12 +31,14 @@ io.on('connection', (socket) => {
       return;
     }
 
-    socket.join(roomId);
-    playerRooms.set(socket.id, { roomId, playerName });
+    const roomIdStr = String(roomId);
+
+    socket.join(roomIdStr);
+    playerRooms.set(socket.id, { roomId: roomIdStr, playerName });
 
     // Initialize room if it doesn't exist
-    if (!activeRooms.has(roomId)) {
-      activeRooms.set(roomId, {
+    if (!activeRooms.has(roomIdStr)) {
+      activeRooms.set(roomIdStr, {
         players: [],
         currentRound: 1,
         announcements: {},
@@ -45,7 +47,7 @@ io.on('connection', (socket) => {
       });
     }
 
-    const room = activeRooms.get(roomId);
+    const room = activeRooms.get(roomIdStr);
     
     // Add player if not already present
     if (!room.players.find(p => p.name === playerName)) {
@@ -56,12 +58,12 @@ io.on('connection', (socket) => {
       if (player) player.socketId = socket.id;
     }
 
-    console.log(`${playerName} joined room ${roomId}`);
+    console.log(`${playerName} joined room ${roomIdStr}`);
     
     // Notify all players in the room
-    io.to(roomId).emit('player_joined', {
+    io.to(roomIdStr).emit('player_joined', {
       playerName,
-      roomId,
+      roomId: roomIdStr,
       players: room.players,
       timestamp: new Date().toISOString()
     });
