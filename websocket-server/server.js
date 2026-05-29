@@ -59,6 +59,16 @@ io.on('connection', (socket) => {
     }
 
     console.log(`${playerName} joined room ${roomIdStr}`);
+
+    // Rejouer distribution / phase d'annonces si le client a raté le broadcast Laravel
+    if (room.lastCardDistribution) {
+      socket.emit('card_distribution', room.lastCardDistribution);
+      console.log(`🔁 Replay card_distribution → ${playerName} (room ${roomIdStr})`);
+    }
+    if (room.lastAnnouncementPhase) {
+      socket.emit('announcement_phase_started', room.lastAnnouncementPhase);
+      console.log(`🔁 Replay announcement_phase_started → ${playerName} (room ${roomIdStr})`);
+    }
     
     // Notify all players in the room
     io.to(roomIdStr).emit('player_joined', {
@@ -289,6 +299,26 @@ app.post('/broadcast', (req, res) => {
     const connectedCount = room ? room.size : 0;
 
     io.to(roomIdStr).emit(event, payload);
+
+    // Conserver le dernier état pour les clients qui rejoignent après le broadcast
+    if (!activeRooms.has(roomIdStr)) {
+      activeRooms.set(roomIdStr, {
+        players: [],
+        currentRound: 1,
+        announcements: {},
+        cardsInPlay: [],
+        gamePhase: 'waiting',
+      });
+    }
+    const roomState = activeRooms.get(roomIdStr);
+    if (event === 'card_distribution') {
+      roomState.lastCardDistribution = payload;
+      roomState.gamePhase = 'announcement';
+      roomState.currentRound = payload.round_number ?? roomState.currentRound;
+    } else if (event === 'announcement_phase_started') {
+      roomState.lastAnnouncementPhase = payload;
+      roomState.gamePhase = 'announcement';
+    }
 
     console.log(`📡 Broadcast: ${event} to room ${roomIdStr} (${connectedCount} socket(s))`);
 

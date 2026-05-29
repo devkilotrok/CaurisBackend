@@ -324,19 +324,42 @@ class RoomController extends Controller
                 ? $this->formatChatSyncData($roomId, $request->query('last_chat_id'))
                 : ['messages' => [], 'last_chat_id' => null];
 
-            $game = Game::where('room_id', $roomId)
-                ->orderByDesc('game_id')
-                ->first();
+            $roomIdStr = (string) $roomId;
 
-            if ($game) {
-                $payload['game_id'] = $game->game_id;
+            // Priorité : manche avec cartes distribuées (évite un game_id plus récent sans round)
+            $round = Round::where(function ($q) use ($roomId, $roomIdStr) {
+                    $q->where('room_id', $roomId)->orWhere('room_id', $roomIdStr);
+                })
+                ->orderByDesc('round_number')
+                ->get()
+                ->first(function (Round $candidate) {
+                    $cards = $candidate->distributed_cards ?? [];
 
-                $round = Round::where('game_id', $game->game_id)
-                    ->orderByDesc('round_number')
+                    return is_array($cards) && count($cards) > 0;
+                });
+
+            if ($round) {
+                $game = Game::find($round->game_id);
+                if ($game) {
+                    $payload['game_id'] = $game->game_id;
+                    $payload['round'] = $this->formatRoundSyncData($room, $round, $game->game_id);
+                }
+            } else {
+                $game = Game::where('room_id', $roomId)
+                    ->orWhere('room_id', $roomIdStr)
+                    ->orderByDesc('game_id')
                     ->first();
 
-                if ($round) {
-                    $payload['round'] = $this->formatRoundSyncData($room, $round, $game->game_id);
+                if ($game) {
+                    $payload['game_id'] = $game->game_id;
+
+                    $round = Round::where('game_id', $game->game_id)
+                        ->orderByDesc('round_number')
+                        ->first();
+
+                    if ($round) {
+                        $payload['round'] = $this->formatRoundSyncData($room, $round, $game->game_id);
+                    }
                 }
             }
 

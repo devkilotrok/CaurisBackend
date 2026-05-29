@@ -893,8 +893,8 @@ class GameController extends Controller
             $roundNumber = $request->input('round_number');
             $trickNumber = $request->input('trick_number');
 
-            // ✅ Normaliser room_id pour éviter les problèmes de type (string vs int)
-            $roomIdNormalized = (string)$roomId;
+            // ✅ Normaliser room_id (int) pour éviter les doublons game_id
+            $roomIdNormalized = (int) $roomId;
 
             // Récupérer ou créer le game depuis le room_id
             $game = Game::firstOrCreate(
