@@ -450,8 +450,13 @@ class GameController extends Controller
                 'should_complete' => ($phaseData['submitted_count'] >= $playerCount) || ($actualAnnouncementCount >= $playerCount),
             ]);
             
+            $isComplete = ($phaseData['submitted_count'] >= $playerCount)
+                || ($actualAnnouncementCount >= $playerCount);
+            $announcementsMap = null;
+            $firstPlayerName = null;
+
             // ✅ Utiliser la BDD comme source de vérité si le cache est désynchronisé
-            if ($phaseData['submitted_count'] >= $playerCount || $actualAnnouncementCount >= $playerCount) {
+            if ($isComplete) {
                 // ✅ Marquer la phase comme complétée dans la BDD
                 $round->status = Round::STATUS_PLAYING;
                 $round->announcement_end_at = null; // Plus besoin du timeout
@@ -500,13 +505,24 @@ class GameController extends Controller
                 ]);
             }
 
+            $responseData = [
+                'submitted_count' => $phaseData['submitted_count'],
+                'players_count' => $playerCount,
+                'is_complete' => $isComplete,
+                'round_number' => (int) $request->round_number,
+            ];
+
+            // ✅ Secours HTTP : le client qui soumet la dernière annonce peut démarrer sans WS
+            if ($isComplete && $announcementsMap !== null) {
+                $responseData['announcements'] = $announcementsMap;
+                $responseData['first_player'] = $firstPlayerName;
+                $responseData['round_status'] = Round::STATUS_PLAYING;
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Annonce enregistrée',
-                'data' => [
-                    'submitted_count' => $phaseData['submitted_count'],
-                    'is_complete' => $phaseData['submitted_count'] >= 4,
-                ],
+                'data' => $responseData,
             ], 200);
 
         } catch (\Exception $e) {
