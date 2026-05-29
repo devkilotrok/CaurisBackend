@@ -70,28 +70,18 @@ class RoundController extends Controller
                 ], 409);
             }
 
+            // Info WS seulement (ne bloque plus — replay join_room + /sync couvrent les clients en retard)
             if (!$testMode) {
                 $wsStatus = $this->wsService->getRoomStatus($data['room_id']);
                 $connectedSockets = (int) ($wsStatus['connected_sockets'] ?? 0);
                 $joinedCount = (int) ($wsStatus['joined_count'] ?? 0);
 
-                if ($connectedSockets < $playerCount || $joinedCount < $playerCount) {
-                    Log::info('Distribution blocked: WebSocket room not ready', [
-                        'room_id' => $data['room_id'],
-                        'connected_sockets' => $connectedSockets,
-                        'joined_count' => $joinedCount,
-                        'required_players' => $playerCount,
-                    ]);
-
-                    return response()->json([
-                        'success' => false,
-                        'code' => 'ROOM_NOT_READY',
-                        'message' => 'Tous les joueurs ne sont pas encore connectés au WebSocket',
-                        'connected_sockets' => $connectedSockets,
-                        'joined_count' => $joinedCount,
-                        'required_players' => $playerCount,
-                    ], 409);
-                }
+                Log::info('Distribution proceeding — WebSocket room snapshot', [
+                    'room_id' => $data['room_id'],
+                    'connected_sockets' => $connectedSockets,
+                    'joined_count' => $joinedCount,
+                    'db_players' => $playerCount,
+                ]);
             }
 
             // Créer le deck de 52 cartes
