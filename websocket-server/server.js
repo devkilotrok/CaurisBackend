@@ -339,6 +339,29 @@ app.post('/broadcast', (req, res) => {
   }
 });
 
+/**
+ * GET /rooms/:roomId/status
+ * Vérifie combien de sockets et joueurs sont présents dans une salle.
+ */
+app.get('/rooms/:roomId/status', (req, res) => {
+  const roomIdStr = String(req.params.roomId);
+  const room = activeRooms.get(roomIdStr);
+  const socketRoom = io.sockets.adapter.rooms.get(roomIdStr);
+  const connectedSockets = socketRoom ? socketRoom.size : 0;
+  const joinedPlayers = room
+    ? room.players.map((p) => p.name).filter(Boolean)
+    : [];
+
+  res.json({
+    success: true,
+    room_id: roomIdStr,
+    connected_sockets: connectedSockets,
+    joined_players: joinedPlayers,
+    joined_count: joinedPlayers.length,
+    has_card_distribution: Boolean(room?.lastCardDistribution),
+  });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({

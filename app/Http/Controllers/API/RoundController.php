@@ -56,7 +56,43 @@ class RoundController extends Controller
                 ], 400);
             }
 
+            $requiredPlayers = (int) ($room->max_players ?? 4);
+            $playerCount = $players->count();
             $testMode = (bool)($data['test_mode'] ?? false);
+
+            if (!$testMode && $playerCount < $requiredPlayers) {
+                return response()->json([
+                    'success' => false,
+                    'code' => 'ROOM_NOT_FULL',
+                    'message' => "La salle attend {$requiredPlayers} joueurs ({$playerCount} présents)",
+                    'required_players' => $requiredPlayers,
+                    'current_players' => $playerCount,
+                ], 409);
+            }
+
+            if (!$testMode) {
+                $wsStatus = $this->wsService->getRoomStatus($data['room_id']);
+                $connectedSockets = (int) ($wsStatus['connected_sockets'] ?? 0);
+                $joinedCount = (int) ($wsStatus['joined_count'] ?? 0);
+
+                if ($connectedSockets < $playerCount || $joinedCount < $playerCount) {
+                    Log::info('Distribution blocked: WebSocket room not ready', [
+                        'room_id' => $data['room_id'],
+                        'connected_sockets' => $connectedSockets,
+                        'joined_count' => $joinedCount,
+                        'required_players' => $playerCount,
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'code' => 'ROOM_NOT_READY',
+                        'message' => 'Tous les joueurs ne sont pas encore connectés au WebSocket',
+                        'connected_sockets' => $connectedSockets,
+                        'joined_count' => $joinedCount,
+                        'required_players' => $playerCount,
+                    ], 409);
+                }
+            }
 
             // Créer le deck de 52 cartes
             $suits = ['S', 'H', 'D', 'C'];

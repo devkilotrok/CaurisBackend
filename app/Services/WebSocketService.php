@@ -68,6 +68,34 @@ class WebSocketService
     }
 
     /**
+     * État d'une salle sur le serveur WebSocket (sockets connectés, joueurs join_room).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getRoomStatus($roomId): ?array
+    {
+        try {
+            $response = Http::timeout(5)->get("{$this->socketUrl}/rooms/{$roomId}/status");
+
+            if ($response->successful()) {
+                return $response->json();
+            }
+
+            Log::warning('WebSocket room status failed', [
+                'room_id' => $roomId,
+                'response' => $response->body(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('WebSocket room status error', [
+                'room_id' => $roomId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
+    }
+
+    /**
      * Alternative: Utiliser un service externe ou Redis Pub/Sub
      * pour diffuser les événements au serveur WebSocket
      */
