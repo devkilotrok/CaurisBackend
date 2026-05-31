@@ -11,8 +11,8 @@ class WebSocketService
 
     public function __construct()
     {
-        // URL du serveur WebSocket Node.js
-        $this->socketUrl = env('WEBSOCKET_SERVER_URL', 'http://localhost:3000');
+        $url = (string) config('services.websocket.url', 'http://localhost:3000');
+        $this->socketUrl = rtrim(trim($url), '/');
     }
 
     /**
