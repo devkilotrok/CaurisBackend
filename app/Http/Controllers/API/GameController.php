@@ -457,6 +457,12 @@ class GameController extends Controller
 
             // ✅ Utiliser la BDD comme source de vérité si le cache est désynchronisé
             if ($isComplete) {
+                $adjustment = $this->gameService->applyLowTotalAnnouncementAdjustment(
+                    (int) $gameId,
+                    (int) $request->round_number
+                );
+                $announcementsMap = $adjustment['announcements'];
+
                 // ✅ Marquer la phase comme complétée dans la BDD
                 $round->status = Round::STATUS_PLAYING;
                 $round->announcement_end_at = null; // Plus besoin du timeout
@@ -466,24 +472,27 @@ class GameController extends Controller
                 $phaseData['is_complete'] = true;
                 Cache::put($cacheKey, $phaseData, 60);
 
-                // Récupérer toutes les annonces
-                $allAnnouncements = Announcement::where('game_id', $gameId)
-                    ->where('round_number', $request->round_number)
-                    ->with('player.user')
-                    ->get();
-
-                $announcementsMap = [];
-                foreach ($allAnnouncements as $ann) {
-                    $playerName = $ann->player->user->pseudo ?? 'Joueur';
-                    $announcementsMap[$playerName] = $ann->announcement_value;
-                }
-
                 // Déterminer le premier joueur pour le premier pli
                 $players = \App\Models\RoomPlayer::where('room_id', $game->room_id)
+                    ->orderBy('position', 'asc')
                     ->with('user')
                     ->get();
                 $firstPlayer = $players->first();
                 $firstPlayerName = $firstPlayer->user->pseudo ?? 'Joueur';
+
+                if ($adjustment['adjusted']) {
+                    $this->wsService->broadcastToRoom($game->room_id, [
+                        'event' => 'announcements_adjusted',
+                        'data' => [
+                            'roomId' => (string) $game->room_id,
+                            'round_number' => $request->round_number,
+                            'announcements' => $announcementsMap,
+                            'previous_total' => $adjustment['previous_total'],
+                            'new_total' => $adjustment['new_total'],
+                            'reason' => 'total_below_10',
+                        ],
+                    ]);
+                }
 
                 // Émettre announcements_complete
                 $this->wsService->broadcastToRoom($game->room_id, [
@@ -493,6 +502,8 @@ class GameController extends Controller
                         'round_number' => $request->round_number,
                         'announcements' => $announcementsMap,
                         'first_player' => $firstPlayerName,
+                        'announcements_adjusted' => $adjustment['adjusted'],
+                        'previous_announcements_total' => $adjustment['previous_total'],
                     ],
                 ]);
 
@@ -502,6 +513,9 @@ class GameController extends Controller
                     'round_id' => $round->round_id,
                     'round_status' => $round->status,
                     'announcements' => $announcementsMap,
+                    'announcements_adjusted' => $adjustment['adjusted'],
+                    'previous_total' => $adjustment['previous_total'],
+                    'new_total' => $adjustment['new_total'],
                 ]);
             }
 
@@ -517,6 +531,13 @@ class GameController extends Controller
                 $responseData['announcements'] = $announcementsMap;
                 $responseData['first_player'] = $firstPlayerName;
                 $responseData['round_status'] = Round::STATUS_PLAYING;
+                if (isset($adjustment)) {
+                    $responseData['announcements_adjusted'] = $adjustment['adjusted'];
+                    if ($adjustment['adjusted']) {
+                        $responseData['previous_announcements_total'] = $adjustment['previous_total'];
+                        $responseData['new_announcements_total'] = $adjustment['new_total'];
+                    }
+                }
             }
 
             return response()->json([

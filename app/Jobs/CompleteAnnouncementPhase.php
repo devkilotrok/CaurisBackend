@@ -11,6 +11,7 @@ use App\Models\Game;
 use App\Models\RoomPlayer;
 use App\Models\Announcement;
 use App\Services\WebSocketService;
+use App\Services\GameService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 
@@ -35,7 +36,7 @@ class CompleteAnnouncementPhase implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(WebSocketService $wsService)
+    public function handle(WebSocketService $wsService, GameService $gameService)
     {
         // ✅ NOUVEAU: Utiliser la BDD comme source de vérité
         $round = \App\Models\Round::where('game_id', $this->gameId)
@@ -86,6 +87,7 @@ class CompleteAnnouncementPhase implements ShouldQueue
         }
 
         $players = RoomPlayer::where('room_id', $this->roomId)
+            ->orderBy('position', 'asc')
             ->with('user')
             ->get();
 
@@ -131,6 +133,12 @@ class CompleteAnnouncementPhase implements ShouldQueue
             }
         }
 
+        $adjustment = $gameService->applyLowTotalAnnouncementAdjustment(
+            (int) $this->gameId,
+            (int) $this->roundNumber
+        );
+        $announcementsMap = $adjustment['announcements'];
+
         // ✅ CRITIQUE: Marquer la phase comme complétée dans la BDD
         $round->status = \App\Models\Round::STATUS_PLAYING;
         $round->announcement_end_at = null; // Plus besoin du timeout
@@ -147,6 +155,20 @@ class CompleteAnnouncementPhase implements ShouldQueue
         $firstPlayer = $players->first();
         $firstPlayerName = $firstPlayer->user->pseudo ?? 'Joueur';
 
+        if ($adjustment['adjusted']) {
+            $wsService->broadcastToRoom($this->roomId, [
+                'event' => 'announcements_adjusted',
+                'data' => [
+                    'roomId' => (string) $this->roomId,
+                    'round_number' => $this->roundNumber,
+                    'announcements' => $announcementsMap,
+                    'previous_total' => $adjustment['previous_total'],
+                    'new_total' => $adjustment['new_total'],
+                    'reason' => 'total_below_10',
+                ],
+            ]);
+        }
+
         // Émettre l'événement announcements_complete
         $wsService->broadcastToRoom($this->roomId, [
             'event' => 'announcements_complete',
@@ -155,6 +177,8 @@ class CompleteAnnouncementPhase implements ShouldQueue
                 'round_number' => $this->roundNumber,
                 'announcements' => $announcementsMap,
                 'first_player' => $firstPlayerName,
+                'announcements_adjusted' => $adjustment['adjusted'],
+                'previous_announcements_total' => $adjustment['previous_total'],
             ],
         ]);
 
@@ -164,6 +188,9 @@ class CompleteAnnouncementPhase implements ShouldQueue
             'round_id' => $round->round_id,
             'round_status' => $round->status,
             'announcements' => $announcementsMap,
+            'announcements_adjusted' => $adjustment['adjusted'],
+            'previous_total' => $adjustment['previous_total'],
+            'new_total' => $adjustment['new_total'],
         ]);
     }
 }

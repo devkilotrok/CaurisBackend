@@ -15,6 +15,11 @@ use Illuminate\Support\Facades\Cache;
 
 class GameService
 {
+    /** Somme minimale des annonces ; en dessous, +1 par joueur (règle Callbreak). */
+    public const ANNOUNCEMENTS_MIN_TOTAL = 10;
+
+    public const ANNOUNCEMENTS_MAX_PER_PLAYER = 13;
+
     /**
      * Calculer le gagnant d'un pli basé sur les règles du Callbreak
      * 
@@ -686,11 +691,79 @@ class GameService
     }
 
     /**
+     * Si la somme des annonces est inférieure à 10, ajoute +1 à chaque joueur en BDD (plafond 13).
+     *
+     * @return array{adjusted: bool, previous_total: int, new_total: int, announcements: array<string, int>}
+     */
+    public function applyLowTotalAnnouncementAdjustment(int $gameId, int $roundNumber): array
+    {
+        $announcements = Announcement::where('game_id', $gameId)
+            ->where('round_number', $roundNumber)
+            ->with('player.user')
+            ->get();
+
+        $map = [];
+        $previousTotal = 0;
+
+        foreach ($announcements as $ann) {
+            $playerName = $ann->player->user->pseudo ?? 'Joueur';
+            $value = (int) $ann->announcement_value;
+            $map[$playerName] = $value;
+            $previousTotal += $value;
+        }
+
+        if ($announcements->isEmpty() || $previousTotal >= self::ANNOUNCEMENTS_MIN_TOTAL) {
+            return [
+                'adjusted' => false,
+                'previous_total' => $previousTotal,
+                'new_total' => $previousTotal,
+                'announcements' => $map,
+            ];
+        }
+
+        foreach ($announcements as $ann) {
+            $ann->announcement_value = min(
+                (int) $ann->announcement_value + 1,
+                self::ANNOUNCEMENTS_MAX_PER_PLAYER
+            );
+            $ann->save();
+        }
+
+        $map = [];
+        $newTotal = 0;
+
+        foreach ($announcements as $ann) {
+            $ann->refresh();
+            $playerName = $ann->player->user->pseudo ?? 'Joueur';
+            $value = (int) $ann->announcement_value;
+            $map[$playerName] = $value;
+            $newTotal += $value;
+        }
+
+        Log::info('Announcements adjusted (+1 each): total below minimum', [
+            'game_id' => $gameId,
+            'round_number' => $roundNumber,
+            'previous_total' => $previousTotal,
+            'new_total' => $newTotal,
+            'announcements' => $map,
+        ]);
+
+        return [
+            'adjusted' => true,
+            'previous_total' => $previousTotal,
+            'new_total' => $newTotal,
+            'announcements' => $map,
+        ];
+    }
+
+    /**
      * ✅ NOUVEAU: Valider les annonces d'un round
      * 
      * Règles :
      * - Chaque joueur doit annoncer entre 0 et 13 plis
      * - La somme des annonces ne peut pas être égale au nombre total de plis (13)
+     * - Si la somme est inférieure à 10, l'ajustement (+1/joueur) est appliqué à la fin de phase
+     *   via applyLowTotalAnnouncementAdjustment(), pas ici.
      * 
      * @param int $roundId ID du round
      * @param array $announcements Tableau associatif [player_name => announcement]
