@@ -167,42 +167,31 @@ class RoundController extends Controller
                 $playersMissingSpades = [];
                 
                 if ($testMode) {
-                    // Mode test: chaque joueur reçoit exactement 13 cartes
-                    // Distribution fixe et prévisible pour faciliter les tests
+                    // Mode test: 13 cartes par joueur, distribution round-robin (au moins 1 pique chacun).
                     $baseTestCards = [
-                        // Pique (S)
                         'AS','KS','QS','JS','0S','9S','8S','7S','6S','5S','4S','3S','2S',
-                        // Cœur (H)
                         'AH','KH','QH','JH','0H','9H','8H','7H','6H','5H','4H','3H','2H',
-                        // Carreau (D)
                         'AD','KD','QD','JD','0D','9D','8D','7D','6D','5D','4D','3D','2D',
-                        // Trèfle (C)
                         'AC','KC','QC','JC','0C','9C','8C','7C','6C','5C','4C','3C','2C',
                     ];
-                    
-                    // Répéter le deck si nécessaire (pour plus de 4 joueurs)
-                    $totalCardsNeeded = 13 * $playerCount;
-                    $testCards = [];
-                    while (count($testCards) < $totalCardsNeeded) {
-                        $testCards = array_merge($testCards, $baseTestCards);
-                    }
-                    // Tronquer à exactement le nombre nécessaire
-                    $testCards = array_slice($testCards, 0, $totalCardsNeeded);
-                    
-                    $cardIndex = 0;
+
+                    $playerIndex = 0;
                     foreach ($players as $player) {
                         $playerName = $player->user->pseudo ?? 'Joueur';
                         $playerCards = [];
-                        
-                        // Distribuer 13 cartes à ce joueur
-                        for ($i = 0; $i < 13 && $cardIndex < count($testCards); $i++) {
-                            $card = $testCards[$cardIndex];
+
+                        for ($i = 0; $i < 13; $i++) {
+                            $cardIndex = $playerIndex + ($i * $playerCount);
+                            if ($cardIndex >= count($baseTestCards)) {
+                                break;
+                            }
+                            $card = $baseTestCards[$cardIndex];
                             $playerCards[] = $card;
                             $distributedCards[] = $card;
-                            $cardIndex++;
                         }
-                        
+
                         $distribution[$playerName] = $playerCards;
+                        $playerIndex++;
                     }
                 } else {
                     // Mélanger avant chaque tentative pour varier la distribution
