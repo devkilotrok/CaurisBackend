@@ -238,10 +238,13 @@ class GameController extends Controller
             $cacheKey = "announcement_phase_{$gameId}_{$roundNumber}";
             $phaseData = Cache::get($cacheKey);
             
-            // ✅ AMÉLIORATION: Synchroniser le cache avec la BDD pour éviter les désynchronisations
-            $actualAnnouncementCount = Announcement::where('game_id', $gameId)
-                ->where('round_number', $roundNumber)
-                ->count();
+            // ✅ Compteur BDD = joueurs distincts ayant annoncé (pas le nombre de lignes)
+            $phaseProgress = $this->gameService->getAnnouncementPhaseProgress(
+                (int) $gameId,
+                $roundNumber,
+                (int) $game->room_id
+            );
+            $actualAnnouncementCount = $phaseProgress['announced_count'];
             
             if (!$phaseData) {
                 // Si le cache n'existe pas, le créer à partir de la BDD
@@ -341,24 +344,9 @@ class GameController extends Controller
                 }
             }
 
-            // ✅ Vérifier que le joueur n'a pas déjà soumis d'annonce
-            $existingAnnouncement = Announcement::where('game_id', $gameId)
-                ->where('round_number', $request->round_number)
-                ->where('player_id', $roomPlayer->player_id)
-                ->first();
+            $announcementValue = (int) $request->announcement_value;
+            $roundNumber = (int) $request->round_number;
 
-            if ($existingAnnouncement) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Vous avez déjà soumis votre annonce pour ce round'
-                ], 400);
-            }
-
-            // ✅ S'assurer que les valeurs sont correctes
-            $announcementValue = (int)$request->announcement_value;
-            $roundNumber = (int)$request->round_number;
-            
-            // ✅ Vérifier que l'annonce est entre 2 et 13
             if ($announcementValue < 2 || $announcementValue > 13) {
                 Log::warning('Invalid announcement value', [
                     'game_id' => $gameId,
@@ -371,55 +359,164 @@ class GameController extends Controller
                     'message' => 'La valeur d\'annonce doit être entre 2 et 13 plis'
                 ], 422);
             }
-            
-            // Enregistrer l'annonce
-            try {
+
+            $announcingPlayerName = $playerName ?? ($roomPlayer->user->pseudo ?? 'Joueur');
+            $roomPlayerId = $roomPlayer->player_id;
+            $roomPlayerUserId = $roomPlayer->user_id;
+
+            $result = DB::transaction(function () use (
+                $gameId,
+                $roundNumber,
+                $announcementValue,
+                $announcingPlayerName,
+                $roomPlayerId,
+                $roomPlayerUserId,
+                $game,
+                $cacheKey,
+                $phaseData,
+                $request
+            ) {
+                $round = Round::where('game_id', $gameId)
+                    ->where('round_number', $roundNumber)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$round || $round->status !== Round::STATUS_ANNOUNCEMENT_PHASE) {
+                    return [
+                        'error' => response()->json([
+                            'success' => false,
+                            'message' => 'La phase d\'annonces n\'est pas active',
+                            'debug' => [
+                                'game_id' => $gameId,
+                                'round_number' => $roundNumber,
+                                'round_status' => $round->status ?? null,
+                            ],
+                        ], 400),
+                    ];
+                }
+
+                if ($round->announcement_end_at && now()->isAfter($round->announcement_end_at)) {
+                    return [
+                        'error' => response()->json([
+                            'success' => false,
+                            'message' => 'Le temps d\'annonces est écoulé',
+                        ], 400),
+                    ];
+                }
+
+                $alreadySubmitted = Announcement::where('game_id', $gameId)
+                    ->where('round_number', $roundNumber)
+                    ->where('player_id', $roomPlayerId)
+                    ->exists();
+
+                if ($alreadySubmitted) {
+                    return [
+                        'error' => response()->json([
+                            'success' => false,
+                            'message' => 'Vous avez déjà soumis votre annonce pour ce round',
+                        ], 400),
+                    ];
+                }
+
                 Announcement::create([
                     'game_id' => $gameId,
                     'round_number' => $roundNumber,
-                    'player_id' => $roomPlayer->player_id,
-                    'user_id' => $roomPlayer->user_id,
+                    'player_id' => $roomPlayerId,
+                    'user_id' => $roomPlayerUserId,
                     'announcement_value' => $announcementValue,
                 ]);
-                
+
                 Log::info('Announcement created successfully', [
                     'game_id' => $gameId,
                     'round_number' => $roundNumber,
-                    'player_id' => $roomPlayer->player_id,
-                    'user_id' => $roomPlayer->user_id,
+                    'player_id' => $roomPlayerId,
+                    'user_id' => $roomPlayerUserId,
                     'announcement_value' => $announcementValue,
-                    'player_name' => $playerName ?? ($roomPlayer->user->pseudo ?? 'Unknown'),
+                    'player_name' => $announcingPlayerName,
                 ]);
-            } catch (\Exception $e) {
-                Log::error('Error creating announcement', [
+
+                $progress = $this->gameService->getAnnouncementPhaseProgress(
+                    (int) $gameId,
+                    $roundNumber,
+                    (int) $game->room_id
+                );
+
+                $phaseData['submitted_count'] = $progress['announced_count'];
+                $phaseData['submitted_players'] = Announcement::where('game_id', $gameId)
+                    ->where('round_number', $roundNumber)
+                    ->pluck('player_id')
+                    ->unique()
+                    ->values()
+                    ->all();
+                Cache::put($cacheKey, $phaseData, 60);
+
+                Log::info('Announcement submitted - progress from BDD', [
                     'game_id' => $gameId,
                     'round_number' => $roundNumber,
-                    'player_id' => $roomPlayer->player_id,
-                    'user_id' => $roomPlayer->user_id,
-                    'announcement_value' => $announcementValue,
-                    'error' => $e->getMessage(),
+                    'player' => $announcingPlayerName,
+                    'announced_count' => $progress['announced_count'],
+                    'player_count' => $progress['player_count'],
+                    'missing_player_ids' => $progress['missing_player_ids'],
                 ]);
-                throw $e;
+
+                $isComplete = $progress['is_complete'];
+                $announcementsMap = null;
+                $firstPlayerName = null;
+                $adjustment = null;
+
+                if ($isComplete) {
+                    $adjustment = $this->gameService->applyLowTotalAnnouncementAdjustment(
+                        (int) $gameId,
+                        $roundNumber
+                    );
+                    $announcementsMap = $adjustment['announcements'];
+
+                    $round->status = Round::STATUS_PLAYING;
+                    $round->announcement_end_at = null;
+                    $round->save();
+
+                    $phaseData['is_complete'] = true;
+                    Cache::put($cacheKey, $phaseData, 60);
+
+                    $players = \App\Models\RoomPlayer::where('room_id', $game->room_id)
+                        ->orderBy('position', 'asc')
+                        ->with('user')
+                        ->get();
+                    $firstPlayer = $players->first();
+                    $firstPlayerName = $firstPlayer->user->pseudo ?? 'Joueur';
+
+                    Log::info('All announcements completed (all distinct players submitted)', [
+                        'game_id' => $gameId,
+                        'round_number' => $roundNumber,
+                        'round_id' => $round->round_id,
+                        'announcements' => $announcementsMap,
+                        'announcements_adjusted' => $adjustment['adjusted'],
+                    ]);
+                }
+
+                return [
+                    'round' => $round,
+                    'is_complete' => $isComplete,
+                    'announcements_map' => $announcementsMap,
+                    'first_player_name' => $firstPlayerName,
+                    'adjustment' => $adjustment,
+                    'progress' => $progress,
+                    'phase_data' => $phaseData,
+                ];
+            });
+
+            if (isset($result['error'])) {
+                return $result['error'];
             }
 
-            // ✅ Déterminer le nom du joueur (bot ou humain)
-            $announcingPlayerName = $playerName ?? ($roomPlayer->user->pseudo ?? 'Joueur');
-            
-            // ✅ Mettre à jour le cache avec la nouvelle soumission
-            $phaseData['submitted_count'] = ($phaseData['submitted_count'] ?? 0) + 1;
-            $phaseData['submitted_players'][] = $roomPlayer->player_id;
-            Cache::put($cacheKey, $phaseData, 60);
-            
-            // ✅ Log pour débogage
-            Log::info('Announcement submitted - cache updated', [
-                'game_id' => $gameId,
-                'round_number' => $roundNumber,
-                'player' => $announcingPlayerName,
-                'submitted_count' => $phaseData['submitted_count'],
-                'submitted_players' => $phaseData['submitted_players'],
-            ]);
+            $isComplete = $result['is_complete'];
+            $announcementsMap = $result['announcements_map'];
+            $firstPlayerName = $result['first_player_name'];
+            $adjustment = $result['adjustment'];
+            $progress = $result['progress'];
+            $phaseData = $result['phase_data'];
+            $playerCount = $progress['player_count'];
 
-            // ✅ Émettre announcement_submitted (nouveau nom pour le système simultané)
             $this->wsService->broadcastToRoom($game->room_id, [
                 'event' => 'announcement_submitted',
                 'data' => [
@@ -429,57 +526,12 @@ class GameController extends Controller
                     'player_pseudo' => $announcingPlayerName,
                     'announcement' => $request->announcement_value,
                     'announcement_value' => $request->announcement_value,
-                    'submitted_count' => $phaseData['submitted_count'],
+                    'submitted_count' => $progress['announced_count'],
+                    'players_count' => $playerCount,
                 ],
             ]);
 
-            // ✅ Vérifier si toutes les soumissions sont faites
-            $playerCount = \App\Models\RoomPlayer::where('room_id', $game->room_id)->count();
-            
-            // ✅ AMÉLIORATION: Vérifier aussi depuis la BDD pour éviter les problèmes de cache
-            $actualAnnouncementCount = Announcement::where('game_id', $gameId)
-                ->where('round_number', $roundNumber)
-                ->count();
-            
-            Log::info('Checking if all announcements are complete', [
-                'game_id' => $gameId,
-                'round_number' => $roundNumber,
-                'cache_submitted_count' => $phaseData['submitted_count'],
-                'bdd_announcement_count' => $actualAnnouncementCount,
-                'player_count' => $playerCount,
-                'should_complete' => ($phaseData['submitted_count'] >= $playerCount) || ($actualAnnouncementCount >= $playerCount),
-            ]);
-            
-            $isComplete = ($phaseData['submitted_count'] >= $playerCount)
-                || ($actualAnnouncementCount >= $playerCount);
-            $announcementsMap = null;
-            $firstPlayerName = null;
-
-            // ✅ Utiliser la BDD comme source de vérité si le cache est désynchronisé
-            if ($isComplete) {
-                $adjustment = $this->gameService->applyLowTotalAnnouncementAdjustment(
-                    (int) $gameId,
-                    (int) $request->round_number
-                );
-                $announcementsMap = $adjustment['announcements'];
-
-                // ✅ Marquer la phase comme complétée dans la BDD
-                $round->status = Round::STATUS_PLAYING;
-                $round->announcement_end_at = null; // Plus besoin du timeout
-                $round->save();
-                
-                // Marquer la phase comme complétée dans le cache aussi
-                $phaseData['is_complete'] = true;
-                Cache::put($cacheKey, $phaseData, 60);
-
-                // Déterminer le premier joueur pour le premier pli
-                $players = \App\Models\RoomPlayer::where('room_id', $game->room_id)
-                    ->orderBy('position', 'asc')
-                    ->with('user')
-                    ->get();
-                $firstPlayer = $players->first();
-                $firstPlayerName = $firstPlayer->user->pseudo ?? 'Joueur';
-
+            if ($isComplete && $announcementsMap !== null && $adjustment !== null) {
                 if ($adjustment['adjusted']) {
                     $this->wsService->broadcastToRoom($game->room_id, [
                         'event' => 'announcements_adjusted',
@@ -494,7 +546,6 @@ class GameController extends Controller
                     ]);
                 }
 
-                // Émettre announcements_complete
                 $this->wsService->broadcastToRoom($game->room_id, [
                     'event' => 'announcements_complete',
                     'data' => [
@@ -506,21 +557,10 @@ class GameController extends Controller
                         'previous_announcements_total' => $adjustment['previous_total'],
                     ],
                 ]);
-
-                Log::info('All announcements completed (early completion)', [
-                    'game_id' => $gameId,
-                    'round_number' => $request->round_number,
-                    'round_id' => $round->round_id,
-                    'round_status' => $round->status,
-                    'announcements' => $announcementsMap,
-                    'announcements_adjusted' => $adjustment['adjusted'],
-                    'previous_total' => $adjustment['previous_total'],
-                    'new_total' => $adjustment['new_total'],
-                ]);
             }
 
             $responseData = [
-                'submitted_count' => $phaseData['submitted_count'],
+                'submitted_count' => $progress['announced_count'],
                 'players_count' => $playerCount,
                 'is_complete' => $isComplete,
                 'round_number' => (int) $request->round_number,

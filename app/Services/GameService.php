@@ -691,6 +691,34 @@ class GameService
     }
 
     /**
+     * Progression de la phase d'annonces simultanées (source de vérité = BDD, joueurs distincts).
+     *
+     * @return array{player_count: int, announced_count: int, missing_player_ids: array<int>, is_complete: bool}
+     */
+    public function getAnnouncementPhaseProgress(int $gameId, int $roundNumber, int $roomId): array
+    {
+        $roomPlayerIds = RoomPlayer::where('room_id', $roomId)
+            ->pluck('player_id')
+            ->unique()
+            ->values();
+
+        $announcedPlayerIds = Announcement::where('game_id', $gameId)
+            ->where('round_number', $roundNumber)
+            ->pluck('player_id')
+            ->unique()
+            ->values();
+
+        $missing = $roomPlayerIds->diff($announcedPlayerIds);
+
+        return [
+            'player_count' => $roomPlayerIds->count(),
+            'announced_count' => $announcedPlayerIds->count(),
+            'missing_player_ids' => $missing->values()->all(),
+            'is_complete' => $roomPlayerIds->isNotEmpty() && $missing->isEmpty(),
+        ];
+    }
+
+    /**
      * Si la somme des annonces est inférieure à 10, ajoute +1 à chaque joueur en BDD (plafond 13).
      *
      * @return array{adjusted: bool, previous_total: int, new_total: int, announcements: array<string, int>}
@@ -700,7 +728,10 @@ class GameService
         $announcements = Announcement::where('game_id', $gameId)
             ->where('round_number', $roundNumber)
             ->with('player.user')
-            ->get();
+            ->orderByDesc('id')
+            ->get()
+            ->unique('player_id')
+            ->values();
 
         $map = [];
         $previousTotal = 0;
