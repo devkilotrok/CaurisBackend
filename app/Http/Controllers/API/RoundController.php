@@ -60,11 +60,21 @@ class RoundController extends Controller
             $playerCount = $players->count();
             $testMode = (bool)($data['test_mode'] ?? false);
 
-            if (!$testMode && $playerCount < $requiredPlayers) {
+            if ($playerCount < $requiredPlayers) {
                 return response()->json([
                     'success' => false,
                     'code' => 'ROOM_NOT_FULL',
                     'message' => "La salle attend {$requiredPlayers} joueurs ({$playerCount} présents)",
+                    'required_players' => $requiredPlayers,
+                    'current_players' => $playerCount,
+                ], 409);
+            }
+
+            if ($playerCount > $requiredPlayers) {
+                return response()->json([
+                    'success' => false,
+                    'code' => 'ROOM_OVERFULL',
+                    'message' => "Trop de joueurs dans la salle ({$playerCount}/{$requiredPlayers})",
                     'required_players' => $requiredPlayers,
                     'current_players' => $playerCount,
                 ], 409);

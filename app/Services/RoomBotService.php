@@ -58,6 +58,12 @@ class RoomBotService
      */
     public function fillRoom(Room $room): array
     {
+        $currentCount = (int) DB::table('room_players')
+            ->where('room_id', $room->room_id)
+            ->count();
+
+        $needed = max(0, self::MAX_PLAYERS - $currentCount);
+
         $humanPlayers = DB::table('room_players')
             ->join('users', 'room_players.user_id', '=', 'users.user_id')
             ->where('room_players.room_id', $room->room_id)
@@ -72,8 +78,6 @@ class RoomBotService
                 });
             })
             ->count();
-
-        $needed = max(0, self::MAX_PLAYERS - $humanPlayers);
 
         if ($needed === 0) {
             return [
@@ -118,6 +122,10 @@ class RoomBotService
 
             if ($exists) {
                 continue;
+            }
+
+            if ($added >= $needed) {
+                break;
             }
 
             DB::table('room_players')->insert([
