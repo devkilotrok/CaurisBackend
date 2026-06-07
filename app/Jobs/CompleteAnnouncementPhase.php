@@ -152,8 +152,11 @@ class CompleteAnnouncementPhase implements ShouldQueue
         }
 
         // Déterminer le premier joueur pour le premier pli
-        $firstPlayer = $players->first();
-        $firstPlayerName = $firstPlayer->user->pseudo ?? 'Joueur';
+        $firstPlayer = $this->gameService->resolveRoundLeadPlayer(
+            (int) $this->roomId,
+            (int) $this->roundNumber
+        );
+        $firstPlayerName = $firstPlayer?->user->pseudo ?? 'Joueur';
 
         if ($adjustment['adjusted']) {
             $wsService->broadcastToRoom($this->roomId, [

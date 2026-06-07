@@ -691,6 +691,35 @@ class GameService
     }
 
     /**
+     * Joueur qui ouvre le premier pli d'une manche (même règle partout : créateur + rotation).
+     */
+    public function resolveRoundLeadPlayer(int $roomId, int $roundNumber): ?RoomPlayer
+    {
+        $players = RoomPlayer::where('room_id', $roomId)
+            ->orderBy('position', 'asc')
+            ->with('user')
+            ->get();
+
+        if ($players->isEmpty()) {
+            return null;
+        }
+
+        $creatorIndex = $players->search(function ($player) {
+            return (bool) $player->is_creator === true;
+        });
+
+        if ($creatorIndex === false) {
+            return $players->first();
+        }
+
+        $playerCount = $players->count();
+        $offset = ($roundNumber - 1) % $playerCount;
+        $leaderIndex = ($creatorIndex + $offset) % $playerCount;
+
+        return $players[$leaderIndex];
+    }
+
+    /**
      * Progression de la phase d'annonces simultanées (source de vérité = BDD, joueurs distincts).
      *
      * @return array{player_count: int, announced_count: int, missing_player_ids: array<int>, is_complete: bool}
@@ -769,6 +798,19 @@ class GameService
             $value = (int) $ann->announcement_value;
             $map[$playerName] = $value;
             $newTotal += $value;
+        }
+
+        // Interdit en Callbreak : total exactement 13 plis annoncés
+        if ($newTotal === 13) {
+            $lastAnn = $announcements->last();
+            if ($lastAnn && (int) $lastAnn->announcement_value > 2) {
+                $lastAnn->announcement_value = (int) $lastAnn->announcement_value - 1;
+                $lastAnn->save();
+                $lastAnn->refresh();
+                $lastName = $lastAnn->player->user->pseudo ?? 'Joueur';
+                $map[$lastName] = (int) $lastAnn->announcement_value;
+                $newTotal = array_sum($map);
+            }
         }
 
         Log::info('Announcements adjusted (+1 each): total below minimum', [

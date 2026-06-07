@@ -482,8 +482,11 @@ class GameController extends Controller
                         ->orderBy('position', 'asc')
                         ->with('user')
                         ->get();
-                    $firstPlayer = $players->first();
-                    $firstPlayerName = $firstPlayer->user->pseudo ?? 'Joueur';
+                    $leadPlayer = $this->gameService->resolveRoundLeadPlayer(
+                        (int) $game->room_id,
+                        $roundNumber
+                    );
+                    $firstPlayerName = $leadPlayer?->user->pseudo ?? 'Joueur';
 
                     Log::info('All announcements completed (all distinct players submitted)', [
                         'game_id' => $gameId,
@@ -1071,34 +1074,15 @@ class GameController extends Controller
                 //    - Round 2, Trick 1  -> joueur suivant (sens des tours)
                 //    - Round 3, Trick 1  -> encore le joueur suivant, etc.
                 if ($trickNumber == 1) {
-                    // Récupérer tous les joueurs de la room dans l'ordre de position (sens des tours)
-                    $players = \App\Models\RoomPlayer::where('room_id', $roomId)
-                        ->orderBy('position', 'asc')
-                        ->get();
+                    $leaderPlayer = $this->gameService->resolveRoundLeadPlayer(
+                        (int) $roomId,
+                        (int) $roundNumber
+                    );
 
-                    if ($players->isEmpty()) {
+                    if (!$leaderPlayer) {
                         throw new \Exception("Aucun joueur trouvé dans room_players pour room_id={$roomId}");
                     }
 
-                    // Trouver l'index du créateur dans cette liste
-                    $creatorIndex = $players->search(function ($p) {
-                        return (bool) $p->is_creator === true;
-                    });
-
-                    if ($creatorIndex === false) {
-                        throw new \Exception("Créateur non marqué dans room_players (is_creator) pour room_id={$roomId}");
-                    }
-
-                    $playerCount = $players->count();
-                    // Décalage en fonction du numéro de manche (round)
-                    // Round 1  -> offset 0 (créateur)
-                    // Round 2  -> offset 1 (joueur suivant)
-                    // Round 3  -> offset 2, etc.
-                    $offset = ($roundNumber - 1) % $playerCount;
-                    $leaderIndex = ($creatorIndex + $offset) % $playerCount;
-                    $leaderPlayer = $players[$leaderIndex];
-
-                    // Création du pli 1 avec le bon leader pour ce round
                     $trick = Trick::create([
                         'round_id' => $round->round_id,
                         'trick_number' => $trickNumber,
