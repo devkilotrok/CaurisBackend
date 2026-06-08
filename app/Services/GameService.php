@@ -272,9 +272,13 @@ class GameService
                 Cache::forget("round_scores_{$round->getKey()}");
             });
 
+            $trickCards = [];
             try {
                 $playedCards = PlayedCard::where('trick_id', $trickId)
                     ->orderBy('played_at', 'asc')
+                    ->with(['player.user' => function ($query) {
+                        $query->select('user_id', 'pseudo', 'first_name');
+                    }])
                     ->get();
 
                 $cardsPlayedJson = $playedCards->map(function ($card) {
@@ -283,9 +287,22 @@ class GameService
                         'card_code' => $card->card_code,
                         'card_value' => $card->card_value,
                         'card_suit' => $card->card_suit,
-                        'played_at' => $card->played_at, // ✅ Utiliser played_at
+                        'played_at' => $card->played_at,
                     ];
                 })->toArray();
+
+                $trickCards = $playedCards->map(function ($card) {
+                    $user = $card->player?->user;
+                    $playerName = $user?->pseudo ?? $user?->first_name ?? 'Joueur';
+
+                    return [
+                        'player_name' => $playerName,
+                        'player_id' => $card->player_id,
+                        'card_code' => $card->card_code,
+                        'card_value' => $card->card_value,
+                        'card_suit' => $card->card_suit,
+                    ];
+                })->values()->toArray();
 
                 Trick::where('trick_id', $trickId)->update([
                     'winner_player_id' => $winnerDetails['winner_player_id'],
@@ -303,6 +320,7 @@ class GameService
                 'winner_player_id' => $winnerDetails['winner_player_id'],
                 'winner_name' => $winnerDetails['winner_name'] ?? 'Joueur',
                 'obtained_tricks' => $obtainedTricks,
+                'trick_cards' => $trickCards,
             ];
         } catch (\Exception $e) {
             Log::error('Error in processTrickWinner', [

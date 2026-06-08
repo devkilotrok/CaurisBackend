@@ -61,9 +61,8 @@ class ProcessTrickEndJob implements ShouldQueue
             ]);
 
             // 1. Attendre un délai configurable pour permettre l'affichage des 4 cartes au centre
-            // ⚠️ OPTIMISATION: Réduire à 1 seconde pour améliorer la fluidité
-            // Le frontend peut gérer l'animation localement sans attendre le backend
-            $animationDelay = env('TRICK_ANIMATION_DELAY', 1); // Par défaut 1 seconde au lieu de 2
+            // 2 secondes par défaut : laisse le temps aux clients d'afficher la 4e carte avant trick_completed
+            $animationDelay = env('TRICK_ANIMATION_DELAY', 2);
             sleep((int) $animationDelay);
 
             // 2. Traiter complètement la fin du pli via GameService (compteurs + trick + winner_player_id)
@@ -85,6 +84,7 @@ class ProcessTrickEndJob implements ShouldQueue
             $winnerPlayerId = $result['winner_player_id'];
             $obtainedTricks = $result['obtained_tricks'] ?? [];
             $winnerName = $result['winner_name'] ?? 'Joueur';
+            $trickCards = $result['trick_cards'] ?? [];
             $nextTrickId = null;
             $nextTrickNumber = null;
 
@@ -148,6 +148,8 @@ class ProcessTrickEndJob implements ShouldQueue
                 'next_trick_id' => $nextTrickId,
                 // Compteurs de plis mis à jour (par joueur) pour ce round
                 'obtained_tricks' => $obtainedTricks,
+                // Les 4 cartes du pli terminé (source de vérité pour resync clients)
+                'trick_cards' => $trickCards,
                 // Scores calculés par le backend
                 'scores' => $scores,
                 'timestamp' => now()->toIso8601String(),
