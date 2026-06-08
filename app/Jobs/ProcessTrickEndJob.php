@@ -12,6 +12,7 @@ use App\Services\GameService;
 use App\Models\Trick;
 use App\Models\User;
 use App\Models\Room;
+use App\Jobs\PlayBotTurnJob;
 use App\Models\RoomPlayer;
 use Illuminate\Support\Facades\Log;
 
@@ -187,6 +188,22 @@ class ProcessTrickEndJob implements ShouldQueue
                 'winner_name' => $winnerName,
                 'obtained_tricks' => $obtainedTricks,
             ]);
+
+            // Si le gagnant du pli est un bot, lancer le pli suivant côté serveur
+            if ($nextTrickId && $nextTrickNumber && $winnerPlayerId) {
+                $winnerPlayer = RoomPlayer::with('user')->find($winnerPlayerId);
+                if ($winnerPlayer && ($winnerPlayer->user->is_bot ?? false)) {
+                    PlayBotTurnJob::dispatchSync(
+                        $this->gameId,
+                        $nextTrickId,
+                        $this->roundId,
+                        $this->roomId,
+                        $this->roundNumber,
+                        $nextTrickNumber,
+                        $winnerPlayerId
+                    );
+                }
+            }
 
         } catch (\Exception $e) {
             Log::error('Error in ProcessTrickEndJob', [

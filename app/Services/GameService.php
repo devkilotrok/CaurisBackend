@@ -9,6 +9,7 @@ use App\Models\Trick;
 use App\Models\RoomPlayer;
 use App\Models\Announcement;
 use App\Models\Game;
+use App\Jobs\ProcessTrickEndJob;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
@@ -790,7 +791,43 @@ class GameService
             $previousTotal += $value;
         }
 
-        if ($announcements->isEmpty() || $previousTotal >= self::ANNOUNCEMENTS_MIN_TOTAL) {
+        if ($announcements->isEmpty()) {
+            return [
+                'adjusted' => false,
+                'previous_total' => 0,
+                'new_total' => 0,
+                'announcements' => $map,
+            ];
+        }
+
+        // Interdit : total exactement 13 — réduire le plus gros annonceur de 1
+        if ($previousTotal === 13) {
+            $target = $announcements->sortByDesc('announcement_value')->first();
+            if ($target && (int) $target->announcement_value > 0) {
+                $target->announcement_value = (int) $target->announcement_value - 1;
+                $target->save();
+                $target->refresh();
+                $targetName = $target->player->user->pseudo ?? 'Joueur';
+                $map[$targetName] = (int) $target->announcement_value;
+                $newTotal = array_sum($map);
+
+                Log::info('Announcements adjusted (-1 highest): total was exactly 13', [
+                    'game_id' => $gameId,
+                    'round_number' => $roundNumber,
+                    'player_adjusted' => $targetName,
+                    'new_total' => $newTotal,
+                ]);
+
+                return [
+                    'adjusted' => true,
+                    'previous_total' => $previousTotal,
+                    'new_total' => $newTotal,
+                    'announcements' => $map,
+                ];
+            }
+        }
+
+        if ($previousTotal >= self::ANNOUNCEMENTS_MIN_TOTAL) {
             return [
                 'adjusted' => false,
                 'previous_total' => $previousTotal,
@@ -1109,6 +1146,143 @@ class GameService
         }
 
         return false;
+    }
+
+    /**
+     * Joue automatiquement une carte pour un bot si c'est son tour.
+     *
+     * @return array{played: bool, reason?: string, next_player_id?: int, next_trick_id?: int, next_trick_number?: int}
+     */
+    public function autoPlayBotIfTheirTurn(
+        int $gameId,
+        int $trickId,
+        int $roundId,
+        $roomId,
+        int $roundNumber,
+        int $trickNumber,
+        ?int $expectedPlayerId,
+        WebSocketService $wsService
+    ): array {
+        try {
+            $currentTurn = $this->getCurrentTurn($roundId, $trickId);
+            if (!$currentTurn || empty($currentTurn['player_id'])) {
+                return ['played' => false, 'reason' => 'no_current_turn'];
+            }
+
+            $playerId = (int) $currentTurn['player_id'];
+            if ($expectedPlayerId !== null && $playerId !== $expectedPlayerId) {
+                return ['played' => false, 'reason' => 'turn_changed'];
+            }
+
+            $roomPlayer = RoomPlayer::with('user')->find($playerId);
+            if (!$roomPlayer || !$roomPlayer->user || !($roomPlayer->user->is_bot ?? false)) {
+                return ['played' => false, 'reason' => 'not_bot_turn'];
+            }
+
+            $alreadyPlayed = PlayedCard::where('trick_id', $trickId)
+                ->where('player_id', $playerId)
+                ->exists();
+            if ($alreadyPlayed) {
+                return ['played' => false, 'reason' => 'already_played'];
+            }
+
+            $playableCards = $this->getPlayableCards($roundId, $trickId, $playerId);
+            if (empty($playableCards)) {
+                return ['played' => false, 'reason' => 'no_playable_cards'];
+            }
+
+            $cardCode = $playableCards[0];
+            $playerName = $roomPlayer->user->pseudo ?? 'Joueur';
+
+            $cardSuit = substr($cardCode, -1);
+            $cardValue = substr($cardCode, 0, -1);
+            $cardValueForDB = ($cardValue === '0') ? '10' : $cardValue;
+            $suitMapping = ['S' => 'SPADES', 'H' => 'HEARTS', 'D' => 'DIAMONDS', 'C' => 'CLUBS'];
+            $cardSuitForDB = $suitMapping[$cardSuit] ?? $cardSuit;
+
+            $cardsInTrick = PlayedCard::where('trick_id', $trickId)->count();
+            $cardOrder = $cardsInTrick + 1;
+
+            if ($cardOrder === 1) {
+                Trick::where('trick_id', $trickId)->update([
+                    'lead_player_id' => $playerId,
+                    'status' => 'in_progress',
+                ]);
+            }
+
+            PlayedCard::create([
+                'trick_id' => $trickId,
+                'player_id' => $playerId,
+                'card_code' => $cardCode,
+                'card_value' => $cardValueForDB,
+                'card_suit' => $cardSuitForDB,
+                'played_at' => now(),
+            ]);
+
+            Log::info('Bot auto-play', [
+                'game_id' => $gameId,
+                'trick_id' => $trickId,
+                'player' => $playerName,
+                'card' => $cardCode,
+            ]);
+
+            $wsService->broadcastToRoom($roomId, [
+                'event' => 'card_played',
+                'data' => [
+                    'roomId' => (string) $roomId,
+                    'playerName' => $playerName,
+                    'card' => [
+                        'suit' => $cardSuit,
+                        'value' => $cardValue,
+                    ],
+                    'trickNumber' => $trickNumber,
+                    'timestamp' => now()->toIso8601String(),
+                ],
+            ]);
+
+            if ($cardOrder === 4) {
+                ProcessTrickEndJob::dispatchSync(
+                    $gameId,
+                    $trickId,
+                    $roundId,
+                    $roomId,
+                    $roundNumber,
+                    $trickNumber
+                );
+
+                return ['played' => true, 'reason' => 'trick_completed'];
+            }
+
+            $nextTurn = $this->getCurrentTurn($roundId, $trickId);
+            if ($nextTurn && isset($nextTurn['player_name'])) {
+                $wsService->broadcastToRoom($roomId, [
+                    'event' => 'turn_changed',
+                    'data' => [
+                        'roomId' => (string) $roomId,
+                        'round_id' => $roundId,
+                        'trick_id' => $trickId,
+                        'current_player_name' => $nextTurn['player_name'],
+                        'current_player_id' => $nextTurn['player_id'] ?? null,
+                        'position' => $nextTurn['position'] ?? null,
+                    ],
+                ]);
+            }
+
+            return [
+                'played' => true,
+                'next_player_id' => $nextTurn['player_id'] ?? null,
+                'next_trick_id' => $trickId,
+                'next_trick_number' => $trickNumber,
+            ];
+        } catch (\Exception $e) {
+            Log::error('autoPlayBotIfTheirTurn failed', [
+                'game_id' => $gameId,
+                'trick_id' => $trickId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['played' => false, 'reason' => 'exception'];
+        }
     }
 }
 
