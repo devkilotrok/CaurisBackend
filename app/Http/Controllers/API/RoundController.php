@@ -124,14 +124,11 @@ class RoundController extends Controller
                 ], 500);
             }
 
-            // Mélanger le deck
             if ($testMode) {
                 Log::warning('⚠️ Mode TEST activé pour la distribution des cartes', [
                     'room_id' => $data['room_id'],
                     'round_number' => $data['round_number'],
                 ]);
-            } else {
-                shuffle($deck);
             }
 
             // ✅ Vérifier l'unicité après mélange
@@ -177,13 +174,8 @@ class RoundController extends Controller
                 $playersMissingSpades = [];
                 
                 if ($testMode) {
-                    // Mode test: 13 cartes par joueur, distribution round-robin (au moins 1 pique chacun).
-                    $baseTestCards = [
-                        'AS','KS','QS','JS','0S','9S','8S','7S','6S','5S','4S','3S','2S',
-                        'AH','KH','QH','JH','0H','9H','8H','7H','6H','5H','4H','3H','2H',
-                        'AD','KD','QD','JD','0D','9D','8D','7D','6D','5D','4D','3D','2D',
-                        'AC','KC','QC','JC','0C','9C','8C','7C','6C','5C','4C','3C','2C',
-                    ];
+                    // Mode test: deck mélangé + round-robin (13 cartes/joueur, ≥1 pique chacun).
+                    shuffle($deck);
 
                     $playerIndex = 0;
                     foreach ($players as $player) {
@@ -192,10 +184,10 @@ class RoundController extends Controller
 
                         for ($i = 0; $i < 13; $i++) {
                             $cardIndex = $playerIndex + ($i * $playerCount);
-                            if ($cardIndex >= count($baseTestCards)) {
+                            if ($cardIndex >= count($deck)) {
                                 break;
                             }
-                            $card = $baseTestCards[$cardIndex];
+                            $card = $deck[$cardIndex];
                             $playerCards[] = $card;
                             $distributedCards[] = $card;
                         }
@@ -292,18 +284,16 @@ class RoundController extends Controller
                 $allDistributedCards = array_merge($allDistributedCards, $playerCards);
             }
             
-            if (!$testMode) {
-                $uniqueDistributedCards = array_unique($allDistributedCards);
-                if (count($uniqueDistributedCards) !== count($allDistributedCards)) {
-                    Log::error('Final check: duplicate cards found in distribution', [
-                        'total' => count($allDistributedCards),
-                        'unique' => count($uniqueDistributedCards)
-                    ]);
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Erreur: cartes dupliquées détectées dans la distribution finale'
-                    ], 500);
-                }
+            $uniqueDistributedCards = array_unique($allDistributedCards);
+            if (count($uniqueDistributedCards) !== count($allDistributedCards)) {
+                Log::error('Final check: duplicate cards found in distribution', [
+                    'total' => count($allDistributedCards),
+                    'unique' => count($uniqueDistributedCards)
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erreur: cartes dupliquées détectées dans la distribution finale'
+                ], 500);
             }
 
             // ✅ Vérifier que toutes les cartes distribuées sont dans le deck original (sauf en mode test où on peut avoir plus de 52 cartes)
