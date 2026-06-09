@@ -11,6 +11,7 @@ use App\Models\PlayedCard;
 use App\Models\Round;
 use App\Models\Trick;
 use App\Models\User;
+use App\Jobs\PlayBotTurnJob;
 use App\Services\WebSocketService;
 use App\Services\GameService;
 use Illuminate\Support\Facades\Log;
@@ -920,6 +921,20 @@ class GameController extends Controller
                         'trick_id' => $trickId,
                         'next_player' => $currentTurn['player_name'],
                     ]);
+
+                    // Piloter les bots côté serveur (évite la triple course client)
+                    $nextRoomPlayer = \App\Models\RoomPlayer::with('user')->find($currentTurn['player_id']);
+                    if ($nextRoomPlayer && ($nextRoomPlayer->user->is_bot ?? false)) {
+                        PlayBotTurnJob::dispatchSync(
+                            $gameId,
+                            $trickId,
+                            $roundId,
+                            $game->room_id,
+                            $roundNumber ?? 1,
+                            $trickNumber ?? 1,
+                            (int) $currentTurn['player_id']
+                        );
+                    }
                 }
             }
 
@@ -1102,6 +1117,21 @@ class GameController extends Controller
                 }
             }
 
+            $playedCardsInTrick = PlayedCard::where('trick_id', $trick->trick_id)
+                ->orderBy('played_at', 'asc')
+                ->with('player.user')
+                ->get()
+                ->map(function ($playedCard) {
+                    return [
+                        'player_name' => $playedCard->player->user->pseudo ?? 'Joueur',
+                        'card_code' => $playedCard->card_code,
+                    ];
+                })
+                ->values()
+                ->all();
+
+            $currentTurn = $this->gameService->getCurrentTurn($round->round_id, $trick->trick_id);
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -1110,6 +1140,9 @@ class GameController extends Controller
                     'trick_id' => $trick->trick_id,
                     'round_number' => $roundNumber,
                     'trick_number' => $trickNumber,
+                    'played_cards' => $playedCardsInTrick,
+                    'cards_in_trick' => count($playedCardsInTrick),
+                    'current_turn' => $currentTurn,
                 ]
             ], 200);
 
