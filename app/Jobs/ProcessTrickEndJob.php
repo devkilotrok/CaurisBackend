@@ -61,12 +61,8 @@ class ProcessTrickEndJob implements ShouldQueue
                 'trick_id' => $this->trickId,
             ]);
 
-            // 1. Attendre un délai configurable pour permettre l'affichage des 4 cartes au centre
-            // 2 secondes par défaut : laisse le temps aux clients d'afficher la 4e carte avant trick_completed
-            $animationDelay = env('TRICK_ANIMATION_DELAY', 2);
-            sleep((int) $animationDelay);
-
-            // 2. Traiter complètement la fin du pli via GameService (compteurs + trick + winner_player_id)
+            // Traiter immédiatement : le délai d'animation est géré côté client.
+            // (Un sleep() ici bloquait la requête HTTP et empêchait trick_completed d'être diffusé.)
             $result = $gameService->processTrickWinner(
                 $this->trickId,
                 $this->roundId,

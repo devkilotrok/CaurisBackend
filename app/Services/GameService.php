@@ -227,6 +227,52 @@ class GameService
     }
 
     /**
+     * Reconstruit le résultat d'un pli déjà marqué completed (évite double comptage).
+     */
+    protected function buildCompletedTrickResult(
+        Trick $trick,
+        $roundId,
+        $roundNumber,
+        $trickNumber
+    ): ?array {
+        $round = Round::find($roundId);
+        if (!$round) {
+            return null;
+        }
+
+        $winnerUser = $trick->winnerPlayer?->user;
+        $winnerName = $winnerUser?->pseudo ?? ($winnerUser?->first_name ?? 'Joueur');
+
+        $playedCards = PlayedCard::where('trick_id', $trick->trick_id)
+            ->orderBy('played_at', 'asc')
+            ->with(['player.user' => function ($query) {
+                $query->select('user_id', 'pseudo', 'first_name');
+            }])
+            ->get();
+
+        $trickCards = $playedCards->map(function ($card) {
+            $user = $card->player?->user;
+            $playerName = $user?->pseudo ?? $user?->first_name ?? 'Joueur';
+
+            return [
+                'player_name' => $playerName,
+                'player_id' => $card->player_id,
+                'card_code' => $card->card_code,
+                'card_value' => $card->card_value,
+                'card_suit' => $card->card_suit,
+            ];
+        })->values()->toArray();
+
+        return [
+            'winner_player_id' => $trick->winner_player_id,
+            'winner_name' => $winnerName,
+            'obtained_tricks' => $round->obtained_tricks ?? [],
+            'trick_cards' => $trickCards,
+            'already_completed' => true,
+        ];
+    }
+
+    /**
      * Traiter complètement la fin d'un pli :
      * - Met à jour les compteurs de plis obtenus (rounds.obtained_tricks)
      * - Met à jour la table tricks avec winner_player_id et status
@@ -239,6 +285,18 @@ class GameService
     public function processTrickWinner($trickId, $roundId, $roomId, $roundNumber, $trickNumber): ?array
     {
         try {
+            $existingTrick = Trick::with('winnerPlayer.user')->find($trickId);
+            if ($existingTrick
+                && $existingTrick->status === 'completed'
+                && $existingTrick->winner_player_id) {
+                return $this->buildCompletedTrickResult(
+                    $existingTrick,
+                    $roundId,
+                    $roundNumber,
+                    $trickNumber
+                );
+            }
+
             $winnerDetails = $this->calculateTrickWinnerDetails($trickId);
             if (!$winnerDetails || empty($winnerDetails['winner_player_id'])) {
                 Log::warning('processTrickWinner: unable to resolve winner details', [
@@ -1241,14 +1299,14 @@ class GameService
             ]);
 
             if ($cardOrder === 4) {
-                ProcessTrickEndJob::dispatchSync(
+                ProcessTrickEndJob::dispatch(
                     $gameId,
                     $trickId,
                     $roundId,
                     $roomId,
                     $roundNumber,
                     $trickNumber
-                );
+                )->afterResponse();
 
                 return ['played' => true, 'reason' => 'trick_completed'];
             }

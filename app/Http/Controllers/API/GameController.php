@@ -876,29 +876,28 @@ class GameController extends Controller
                 // Utilisation de dispatchSync() pour exécuter immédiatement sans avoir besoin d'un worker de queue
                 // Le Job attendra 1-2 secondes, mettra à jour la BDD et diffusera l'événement
                 // Cela garantit que le traitement se fait même sans worker de queue actif
-                \App\Jobs\ProcessTrickEndJob::dispatchSync(
+                \App\Jobs\ProcessTrickEndJob::dispatch(
                     $gameId,
                     $trickId,
                     $roundId,
                     $game->room_id,
                     $roundNumber ?? 1,
                     $trickNumber ?? 1
-                );
+                )->afterResponse();
 
-                Log::info('Trick end job dispatched', [
+                Log::info('Trick end job queued after response', [
                     'game_id' => $gameId,
                     'trick_id' => $trickId,
                 ]);
 
-                // 7. Retourner immédiatement la réponse (sans attendre le Job)
-                // Le gagnant sera envoyé via l'événement WebSocket trick_completed
                 return response()->json([
                     'success' => true,
                     'message' => 'Pli terminé - traitement en cours',
                     'data' => [
                         'trick_completed' => true,
-                        'processing' => true, // Indique que le traitement est en cours
-                        // Le winner_name sera envoyé via WebSocket dans l'événement trick_completed
+                        'processing' => true,
+                        'cards_in_trick' => 4,
+                        'current_trick_number' => $trickNumber ?? 1,
                     ]
                 ], 200);
             }
@@ -1147,7 +1146,51 @@ class GameController extends Controller
                 ->values()
                 ->all();
 
+            $cardsInTrick = count($playedCardsInTrick);
+
+            // Récupération : 4 cartes en BDD mais pli non clôturé (timeout HTTP, WS manqué, etc.)
+            if ($cardsInTrick >= 4 && ($trick->status ?? 'in_progress') !== 'completed') {
+                Log::warning('getCurrentTrick: stuck trick detected, completing', [
+                    'trick_id' => $trick->trick_id,
+                    'round_id' => $round->round_id,
+                    'cards_in_trick' => $cardsInTrick,
+                ]);
+
+                \App\Jobs\ProcessTrickEndJob::dispatchSync(
+                    $game->game_id,
+                    $trick->trick_id,
+                    $round->round_id,
+                    (int) $roomId,
+                    (int) $roundNumber,
+                    (int) $trickNumber
+                );
+
+                $trick->refresh();
+                $round->refresh();
+            }
+
             $currentTurn = $this->gameService->getCurrentTurn($round->round_id, $trick->trick_id);
+
+            $winnerName = null;
+            $winnerPlayerId = null;
+            if ($trick->status === 'completed' && $trick->winner_player_id) {
+                $trick->loadMissing('winnerPlayer.user');
+                $winnerUser = $trick->winnerPlayer?->user;
+                $winnerName = $winnerUser?->pseudo ?? ($winnerUser?->first_name ?? null);
+                $winnerPlayerId = $trick->winner_player_id;
+            }
+
+            $nextTrickNumber = null;
+            $nextTrickId = null;
+            if ($trick->status === 'completed' && $trickNumber < 13) {
+                $nextTrick = Trick::where('round_id', $round->round_id)
+                    ->where('trick_number', $trickNumber + 1)
+                    ->first();
+                if ($nextTrick) {
+                    $nextTrickNumber = $nextTrick->trick_number;
+                    $nextTrickId = $nextTrick->trick_id;
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -1158,8 +1201,14 @@ class GameController extends Controller
                     'round_number' => $roundNumber,
                     'trick_number' => $trickNumber,
                     'played_cards' => $playedCardsInTrick,
-                    'cards_in_trick' => count($playedCardsInTrick),
+                    'cards_in_trick' => $cardsInTrick,
+                    'trick_status' => $trick->status ?? 'in_progress',
                     'current_turn' => $currentTurn,
+                    'winner_name' => $winnerName,
+                    'winner_player_id' => $winnerPlayerId,
+                    'next_trick_number' => $nextTrickNumber,
+                    'next_trick_id' => $nextTrickId,
+                    'obtained_tricks' => $round->obtained_tricks ?? [],
                 ]
             ], 200);
 
