@@ -685,8 +685,25 @@ class GameController extends Controller
                 ], 403);
             }
 
+            // ✅ SÉCURITÉ: Vérifier que ce joueur n'a pas déjà joué dans ce pli
+            $alreadyPlayedInTrick = PlayedCard::where('trick_id', $trickId)
+                ->where('player_id', $roomPlayer->player_id)
+                ->exists();
+            if ($alreadyPlayedInTrick) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vous avez déjà joué une carte pour ce pli',
+                ], 409);
+            }
+
             // 1. Obtenir l'ordre de la carte dans le pli (combien de cartes ont déjà été jouées)
             $cardsInTrick = PlayedCard::where('trick_id', $trickId)->count();
+            if ($cardsInTrick >= 4) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ce pli est déjà terminé',
+                ], 409);
+            }
             $cardOrder = $cardsInTrick + 1;
             
             // 2. Si c'est la première carte du pli, mettre à jour lead_player_id dans tricks
