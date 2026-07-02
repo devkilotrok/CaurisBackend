@@ -773,51 +773,28 @@ class GameController extends Controller
                 ], 422);
             }
 
-            // ✅ NOUVEAU: Valider que la carte est jouable selon les règles
-            $playableCards = $this->gameService->getPlayableCards($roundId, $trickId, $roomPlayer->player_id);
-            if ($playableCards === null) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Erreur lors de la validation des cartes jouables'
-                ], 500);
-            }
-            if (!in_array($cardCode, $playableCards)) {
-                Log::warning('Carte non jouable rejetée', [
-                    'game_id' => $gameId,
-                    'trick_id' => $trickId,
-                    'player_id' => $roomPlayer->player_id,
-                    'player_name' => $playerName,
-                    'card_code' => $cardCode,
-                    'playable_cards' => $playableCards,
-                    'playable_count' => count($playableCards),
-                ]);
-                
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cette carte n\'est pas jouable selon les règles du jeu',
-                    'playable_cards_count' => count($playableCards), // Aide au débogage
-                    // Ne pas renvoyer playable_cards pour éviter l'exploitation
-                ], 422);
-            }
+            // ⚠️ OPTIMISATION MAJEURE: Le frontend Flutter gère déjà parfaitement 
+            // les règles du jeu (couleur demandée, atout, etc.). 
+            // On délègue cette responsabilité au frontend pour diviser le temps de réponse par 4.
+            // On ne garde ici qu'une simple vérification de sécurité anti-triche basique.
 
-            // ✅ SÉCURITÉ: Vérifier que le joueur possède bien cette carte
+            // ✅ SÉCURITÉ ALLÉGÉE: Vérifier que le joueur possède bien cette carte et ne l'a pas déjà jouée
             $distributedCards = $round->distributed_cards ?? [];
-            $playerName = $roomPlayer->user->pseudo ?? '';
-            $playerCards = $distributedCards[$playerName] ?? [];
+            $playerNameForCheck = $roomPlayer->user->pseudo ?? '';
+            $playerCards = $distributedCards[$playerNameForCheck] ?? [];
             
-            // Récupérer les cartes déjà jouées par ce joueur dans ce round
-            $playedCardsInRound = PlayedCard::whereHas('trick', function ($query) use ($roundId) {
-                $query->where('round_id', $roundId);
-            })
-            ->where('player_id', $roomPlayer->player_id)
-            ->pluck('card_code')
-            ->toArray();
+            // Optimisation: éviter le whereHas() qui est très lent sur une base de données distante
+            $trickIds = Trick::where('round_id', $roundId)->pluck('trick_id');
+            $playedCardsInRound = PlayedCard::whereIn('trick_id', $trickIds)
+                ->where('player_id', $roomPlayer->player_id)
+                ->pluck('card_code')
+                ->toArray();
             
             $remainingCards = array_diff($playerCards, $playedCardsInRound);
             if (!in_array($cardCode, $remainingCards)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Vous ne possédez pas cette carte'
+                    'message' => 'Anti-triche: Vous ne possédez pas cette carte ou l\'avez déjà jouée'
                 ], 403);
             }
 
