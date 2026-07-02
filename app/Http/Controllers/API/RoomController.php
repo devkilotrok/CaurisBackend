@@ -243,8 +243,16 @@ class RoomController extends Controller
             // ⚠️ NOTE: Le débit sera fait par le frontend via /api/payment/debit-room-bet
             // On ne débite pas ici car on ne sait pas encore si c'est mode bot ou humain
 
-            // Si 4 joueurs, démarrer automatiquement
             $updatedPlayerCount = RoomPlayer::where('room_id', $room->room_id)->count();
+
+            // ⚠️ HACK TEMPORAIRE POUR TESTS : Si 2 joueurs ont rejoint, on complète avec 2 bots
+            // Cela permet de tester le mode multijoueur avec seulement 1 téléphone et 1 PC
+            if ($updatedPlayerCount == 2) {
+                app(\App\Services\RoomBotService::class)->fillRoom($room->fresh());
+                $updatedPlayerCount = RoomPlayer::where('room_id', $room->room_id)->count(); // Devrait être 4
+            }
+
+            // Si 4 joueurs, démarrer automatiquement
             if ($updatedPlayerCount >= 4) {
                 $this->startGame($room->room_id);
             }
