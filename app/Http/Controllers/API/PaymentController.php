@@ -155,27 +155,51 @@ class PaymentController extends Controller
     }
 
     /**
-     * Créditer le montant de la cagnotte au compte utilisateur (en cas d'annulation)
+     * Méthode interne pour rembourser un joueur de sa mise si le jeu est annulé.
+     * Cette méthode ne doit pas être exposée publiquement.
+     * 
+     * @param int $userId L'ID de l'utilisateur
+     * @param int $roomId L'ID de la salle
+     * @return bool Vrai si remboursé, faux sinon
      */
-    public function creditRoomBet(Request $request)
+    public function refundPlayerBet(int $userId, int $roomId): bool
     {
         DB::beginTransaction();
         
         try {
-            $validator = Validator::make($request->all(), [
-                'amount' => 'required|integer|min:1',
-                'room_id' => 'required|integer',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Erreur de validation'
-                ], 422);
+            $user = User::find($userId);
+            if (!$user) {
+                DB::rollBack();
+                return false;
             }
 
-            $user = $request->user();
-            $amount = $request->amount;
+            // 1. Chercher si le joueur a bien été débité pour cette salle
+            $transaction = DB::table('transactions')
+                ->where('user_id', $userId)
+                ->where('type', 'retrait')
+                ->where('notes', "Mise salon #$roomId")
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if (!$transaction) {
+                // Pas de mise trouvée, rien à rembourser
+                DB::rollBack();
+                return false;
+            }
+
+            // 2. Vérifier qu'il n'a pas déjà été remboursé
+            $alreadyRefunded = DB::table('transactions')
+                ->where('user_id', $userId)
+                ->where('type', 'depot')
+                ->where('notes', "Remboursement salon #$roomId")
+                ->exists();
+
+            if ($alreadyRefunded) {
+                DB::rollBack();
+                return false;
+            }
+
+            $amount = $transaction->cauris_amount;
 
             // Créditer le montant au compte utilisateur
             $user->increment('cauris_balance', $amount);
@@ -183,19 +207,26 @@ class PaymentController extends Controller
             // Débiter le compte entreprise (remboursement)
             $this->debitCompanyBalance($amount);
 
-            DB::commit();
+            // Enregistrer la transaction de remboursement
+            DB::table('transactions')->insert([
+                'user_id' => $userId,
+                'type' => 'depot',
+                'cauris_amount' => $amount,
+                'fcfa_amount' => $amount * 100,
+                'status' => 'valide',
+                'notes' => "Remboursement salon #$roomId",
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
 
-            return $this->apiResponse(true, 'Montant crédité avec succès', [
-                'new_balance' => $user->cauris_balance,
-            ], 200, false);
+            DB::commit();
+            Log::info("Joueur remboursé pour salon annulé", ['user_id' => $userId, 'room_id' => $roomId, 'amount' => $amount]);
+            return true;
 
         } catch (\Exception $e) {
             DB::rollBack();
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur: ' . $e->getMessage()
-            ], 500);
+            Log::error("Erreur de remboursement", ['user_id' => $userId, 'room_id' => $roomId, 'error' => $e->getMessage()]);
+            return false;
         }
     }
 

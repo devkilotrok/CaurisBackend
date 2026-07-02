@@ -223,7 +223,8 @@ Route::prefix('payment')->middleware('auth:sanctum')->group(function () {
     Route::get('/balance', [App\Http\Controllers\API\PaymentController::class, 'getBalance']);
     Route::get('/check-balance', [App\Http\Controllers\API\PaymentController::class, 'checkBalance']);
     Route::post('/debit-room-bet', [App\Http\Controllers\API\PaymentController::class, 'debitRoomBet']);
-    Route::post('/credit-room-bet', [App\Http\Controllers\API\PaymentController::class, 'creditRoomBet']);
+    // La route de crédit a été supprimée pour des raisons de sécurité. 
+    // Les remboursements se font désormais de manière interne par le serveur.
     // Nouveaux endpoints dépôt / retrait
     Route::post('/deposit', [App\Http\Controllers\API\PaymentController::class, 'deposit']);
     Route::post('/withdraw', [App\Http\Controllers\API\PaymentController::class, 'withdraw']);

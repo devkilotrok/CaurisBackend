@@ -574,12 +574,31 @@ class RoomController extends Controller
                 ], 404);
             }
 
-            $player->delete();
-
-            // Si c'est le créateur, fermer la salle
-            if ($player->is_creator) {
-                Room::where('room_id', $roomId)->update(['status' => 'cancelled']);
+            // Vérifier si un remboursement est possible (jeu non démarré)
+            if (!$this->hasGameStarted($roomId)) {
+                $paymentController = new \App\Http\Controllers\API\PaymentController();
+                
+                // Si c'est le créateur qui part, ça annule la salle, donc on rembourse TOUT LE MONDE
+                if ($player->is_creator) {
+                    $allPlayers = RoomPlayer::where('room_id', $roomId)->get();
+                    foreach ($allPlayers as $p) {
+                        if ($p->user_id) {
+                            $paymentController->refundPlayerBet($p->user_id, $roomId);
+                        }
+                    }
+                    Room::where('room_id', $roomId)->update(['status' => 'cancelled']);
+                } else {
+                    // Sinon on rembourse juste le joueur qui part
+                    $paymentController->refundPlayerBet($user->user_id, $roomId);
+                }
+            } else {
+                // Jeu commencé, pas de remboursement
+                if ($player->is_creator) {
+                    Room::where('room_id', $roomId)->update(['status' => 'cancelled']);
+                }
             }
+
+            $player->delete();
 
             return response()->json([
                 'success' => true,
@@ -609,6 +628,16 @@ class RoomController extends Controller
                 ], 404);
             }
 
+            if (!$this->hasGameStarted($roomId)) {
+                $paymentController = new \App\Http\Controllers\API\PaymentController();
+                $allPlayers = RoomPlayer::where('room_id', $roomId)->get();
+                foreach ($allPlayers as $p) {
+                    if ($p->user_id) {
+                        $paymentController->refundPlayerBet($p->user_id, $roomId);
+                    }
+                }
+            }
+
             $room->delete();
 
             return response()->json([
@@ -622,6 +651,23 @@ class RoomController extends Controller
                 'message' => 'Erreur: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Vérifie si le jeu a commencé (les cartes du 1er round distribuées)
+     */
+    private function hasGameStarted($roomId): bool
+    {
+        $game = \App\Models\Game::where('room_id', $roomId)->first();
+        if (!$game) return false;
+        
+        $round = \App\Models\Round::where('game_id', $game->game_id)
+            ->where('round_number', 1)
+            ->first();
+            
+        if (!$round) return false;
+        
+        return !empty($round->distributed_cards);
     }
 
     /**
