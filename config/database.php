@@ -77,9 +77,6 @@ return [
             // Utiliser le schéma configuré dans l'environnement (par défaut: public)
             'search_path' => env('DB_SCHEMA', 'public'),
             'sslmode' => env('DB_SSLMODE', 'require'),
-            'options' => [
-                PDO::ATTR_EMULATE_PREPARES => true,
-            ],
         ],
 
         'sqlsrv' => [
