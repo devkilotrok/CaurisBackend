@@ -184,15 +184,13 @@ class RoomController extends Controller
 
             $user = $request->user();
             
-            // Trouver la salle
-            $room = Room::where('room_code', $request->room_code)
-                ->where('status', 'waiting')
-                ->first();
+            // Trouver la salle (sans filtrer le status d'abord, pour permettre la reconnexion)
+            $room = Room::where('room_code', $request->room_code)->first();
 
             if (!$room) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Salle non trouvée ou déjà pleine'
+                    'message' => 'Salle non trouvée'
                 ], 404);
             }
 
@@ -202,9 +200,33 @@ class RoomController extends Controller
                 ->first();
 
             if ($existingPlayer) {
+                // Le joueur est déjà dans la salle ! On lui renvoie un succès pour qu'il puisse reconnecter.
+                $players = RoomPlayer::where('room_id', $room->room_id)
+                    ->join('users', 'room_players.user_id', '=', 'users.user_id')
+                    ->select('users.pseudo', 'room_players.position', 'room_players.is_creator')
+                    ->get();
+                    
+                DB::commit();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Vous êtes déjà dans cette salle. Reconnexion en cours...',
+                    'data' => [
+                        'room_id' => $room->room_id,
+                        'room_name' => $room->room_name,
+                        'room_code' => $room->room_code,
+                        'minimum_bet' => $room->minimum_bet,
+                        'status' => $room->status,
+                        'players' => $players,
+                        'already_joined' => true
+                    ]
+                ], 200);
+            }
+            
+            // Si c'est un NOUVEAU joueur, on vérifie que la salle est bien en attente
+            if ($room->status !== 'waiting') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Vous êtes déjà dans cette salle'
+                    'message' => 'La salle a déjà commencé ou n\'est plus disponible'
                 ], 400);
             }
 
