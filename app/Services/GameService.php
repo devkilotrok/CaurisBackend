@@ -1299,14 +1299,14 @@ class GameService
             ]);
 
             if ($cardOrder === 4) {
-                ProcessTrickEndJob::dispatch(
+                ProcessTrickEndJob::dispatchSync(
                     $gameId,
                     $trickId,
                     $roundId,
                     $roomId,
                     $roundNumber,
                     $trickNumber
-                )->afterResponse();
+                );
 
                 return ['played' => true, 'reason' => 'trick_completed'];
             }

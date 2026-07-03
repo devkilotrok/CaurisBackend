@@ -853,16 +853,16 @@ class GameController extends Controller
                 // Utilisation de dispatchSync() pour exécuter immédiatement sans avoir besoin d'un worker de queue
                 // Le Job attendra 1-2 secondes, mettra à jour la BDD et diffusera l'événement
                 // Cela garantit que le traitement se fait même sans worker de queue actif
-                \App\Jobs\ProcessTrickEndJob::dispatch(
+                \App\Jobs\ProcessTrickEndJob::dispatchSync(
                     $gameId,
                     $trickId,
                     $roundId,
                     $game->room_id,
                     $roundNumber ?? 1,
                     $trickNumber ?? 1
-                )->afterResponse();
+                );
 
-                Log::info('Trick end job queued after response', [
+                Log::info('Trick end job executed synchronously', [
                     'game_id' => $gameId,
                     'trick_id' => $trickId,
                 ]);
