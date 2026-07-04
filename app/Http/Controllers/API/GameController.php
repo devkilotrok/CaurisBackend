@@ -1093,14 +1093,31 @@ class GameController extends Controller
                         throw new \Exception("Aucun joueur trouvé dans room_players pour room_id={$roomId}");
                     }
 
-                    $trick = Trick::create([
-                        'round_id' => $round->round_id,
-                        'trick_number' => $trickNumber,
-                        'lead_player_id' => $leaderPlayer->player_id,
-                        'winner_player_id' => null,
-                        'cards_played' => '[]',
-                        'status' => 'in_progress',
-                    ]);
+                    // ✅ FIX: Empêcher la création de doublons (race condition)
+                    $lockKey = "create_trick_{$round->round_id}_{$trickNumber}";
+                    $lock = \Illuminate\Support\Facades\Cache::lock($lockKey, 10);
+                    
+                    try {
+                        $lock->block(5); // Attendre jusqu'à 5 secondes pour obtenir le lock
+                        
+                        // Re-vérifier l'existence sous lock
+                        $trick = Trick::where('round_id', $round->round_id)
+                            ->where('trick_number', $trickNumber)
+                            ->first();
+                            
+                        if (!$trick) {
+                            $trick = Trick::create([
+                                'round_id' => $round->round_id,
+                                'trick_number' => $trickNumber,
+                                'lead_player_id' => $leaderPlayer->player_id,
+                                'winner_player_id' => null,
+                                'cards_played' => '[]',
+                                'status' => 'in_progress',
+                            ]);
+                        }
+                    } finally {
+                        $lock?->release();
+                    }
                 } else {
                     // ⚠️ Pour les plis suivants, le leader est le gagnant du pli précédent.
                     //    Ce nouveau pli doit être créé par le backend (ProcessTrickEndJob) une fois
