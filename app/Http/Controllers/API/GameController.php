@@ -210,7 +210,8 @@ class GameController extends Controller
             }
             
             // ✅ VÉRIFICATION DU TIMEOUT (BDD)
-            if ($round->announcement_end_at && now()->isAfter($round->announcement_end_at)) {
+            // Tolérance de 15 secondes pour permettre au frontend d'envoyer son assignation automatique si le worker ne tourne pas
+            if ($round->announcement_end_at && now()->subSeconds(15)->isAfter($round->announcement_end_at)) {
                 Log::info('Announcement time elapsed (BDD check)', [
                     'game_id' => $gameId,
                     'round_number' => $roundNumber,
@@ -396,7 +397,8 @@ class GameController extends Controller
                     ];
                 }
 
-                if ($round->announcement_end_at && now()->isAfter($round->announcement_end_at)) {
+                // Tolérance de 15 secondes pour le fallback du frontend
+                if ($round->announcement_end_at && now()->subSeconds(15)->isAfter($round->announcement_end_at)) {
                     return [
                         'error' => response()->json([
                             'success' => false,
